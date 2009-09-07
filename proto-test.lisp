@@ -70,28 +70,60 @@
           (buf=  (equalp buffer expected-buffer)))
       (and count= buf=))))
 
+
+(protoc::eval-proto *test-form-1* (find-package :proto-test))
+(protoc::eval-proto *test-form-2* (find-package :proto-test))
+
 (defun test ()
+  (format t "package ~A~%" *package*)
+  ;; test binio
+  (assert (binio::binio-test))
   ;; Test1 from 
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
-  (protoc::eval-proto *test-form-1*)
+  (protoc::eval-proto *test-form-1* (find-package :proto-test))
   (let ((x (make-instance 'test1 )))
     (setf (slot-value x 'a) 150)
     (slot-value x 'a)
     (assert (= 3 (pb::packed-size x)))
-    (assert (test-encoding x 3 (binio::octet-vector #16r8 #16r96 #16r1)))
+    (assert (test-encoding x 3 (binio:octet-vector #16r8 #16r96 #16r1)))
     t)
   ;; Test2 from 
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
-  (protoc::eval-proto *test-form-2*)
+  (protoc::eval-proto *test-form-2* (find-package :proto-test))
   (let ((x (make-instance 'test2))
         );(size 9))
     (setf (slot-value x 'b) "testing")
     (assert (= 9 (pb::packed-size x)))
     (assert (test-encoding x 9 
-                           (binio::octet-vector 
+                           (binio:octet-vector 
                             #16r12 #16r07
                             #16r74 #16r65 #16r73 
                             #16r74 #16r69 #16r6e #16r67)))
-    ;(pb::pack x)
-    t))
+                                        ;(pb::pack x)
+
+    t)
+
+  ;; string decoding
+  (assert (string= "testing"
+                   (pb::decode-string (binio:octet-vector 
+                                       #16r12 #16r07
+                                       #16r74 #16r65 #16r73 
+                                       #16r74 #16r69 #16r6e #16r67)
+                                      1)))
+  ;; unpack test 1
+  (let ((msg1 (make-instance 'test1)))
+    (pb::unpack (binio::octet-vector 8 150 1) msg1)
+    (assert (= 150 (slot-value msg1 'proto-test::a))))
+
+  ;; unpack test 2
+  (let ((msg2 (make-instance 'protoc::test2)))
+    (pb::unpack (binio:octet-vector 
+                 #16r12
+                 #16r07
+                 #16r74 #16r65 #16r73 
+                 #16r74 #16r69 #16r6e #16r67)
+                msg2)
+    (assert (string= "testing" 
+                     (slot-value msg2 'b))))
+  t)
 

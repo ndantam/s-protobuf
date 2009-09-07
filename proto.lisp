@@ -113,6 +113,10 @@
 (defun make-start-code (slot-position typecode)
   (logior (ash slot-position 3) typecode))
 
+(defun read-start-code (buffer start)
+  "returns (values position typecode bytes-read)"
+  (multiple-value-bind (vi i) (decode-uvarint buffer start)
+    (values (ash vi -3) (ldb (byte 3 0) vi) i)))
 
 (defun encode-start-code (slot-position typecode buffer start)
   (encode-uvarint (make-start-code slot-position typecode)
@@ -139,6 +143,41 @@
 
 (defun length-delim-size (length)
   (+ (binio::uvarint-size length) length))
+
+(defun decode-uint32 (buffer start)
+  (binio:decode-uint buffer :little start 32))
+(defun decode-sint32 (buffer start)
+  (binio:decode-sint buffer :little start 32))
+(defun decode-uint64 (buffer start)
+  (binio:decode-uint buffer :little start 64))
+(defun decode-sint64 (buffer start)
+  (binio:decode-sint buffer :little start 64))
+
+(defun decode-string (buffer start)
+  (let ((start start))
+    (multiple-value-bind (strlen strlen-len)
+        (binio:decode-uvarint buffer start)
+      (incf start strlen-len)
+      (multiple-value-bind (str real-strlen)
+          (binio::decode-utf8 buffer 
+                              :buffer-start start 
+                              :buffer-end (+ start strlen))
+        (assert (= strlen real-strlen))
+        (values str (+ strlen-len strlen))))))
+
+
+(defmacro apply-decode (start-place buffer decoder &optional into)
+  (let ((valsym (gensym))
+        (lensym (gensym))
+        (bufsym (gensym))
+        (startsym (gensym)))
+    `(let ((,bufsym ,buffer)
+           (,startsym ,start-place))
+       (multiple-value-bind (,valsym ,lensym)
+           (,decoder ,bufsym ,startsym ,@(if into (list into)))
+         (setf ,start-place (+ ,startsym ,lensym))
+         ,valsym))))
+         
 
 ;(defun packed-type-size (array type)
   ;)

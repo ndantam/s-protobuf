@@ -293,7 +293,66 @@
                            )))
                         field-specs)
            (values (- ,i ,start) ,buffer))))))
-  
+
+
+(defun gen-unpack1 (bufsym startsym placesym type)
+    `(setf ,placesym 
+           (pb::apply-decode ,startsym ,bufsym 
+                             ,(case type
+                               ((:int32 :uint32 :uint64 :enum)
+                                'binio::decode-uvarint)
+                               ((:sint32)
+                                'binio::decode-svarint)
+                               ((:fixed32)
+                                'pb::decode-uint32)
+                               ((:sfixed32)
+                                'pb::decode-sint32)
+                               ((:fixed64 )
+                                'pb::decode-uint64)
+                               ((:sfixed64)
+                                'pb::decode-sint64)
+                               (:string
+                                'pb::decode-string)
+                               (otherwise 
+                                (error "Unknown type: ~A" type))))))
+
+(defun gen-unpacker (bufsym startsym objsym name type repeated packed)
+  (cond 
+    ((and (not repeated) (not packed))
+     (list (gen-unpack1 bufsym startsym `(slot-value ,objsym ',name) type)))
+    (t (error "can't handle this type"))))
+
+(defun def-unpack (form package)
+  (destructuring-bind (message name &rest field-specs) form
+    (declare (ignore message))
+    `(defmethod pb::unpack (buffer
+                            (protobuf ,(pb-sym name package))
+                            &optional (start 0))
+       (declare (binio:octet-vector buffer))
+       (do ((i start))
+           ((>= i (length buffer)) (values protobuf (- i start)))
+         (multiple-value-bind (pos typecode startlen)
+             (pb::read-start-code buffer i)
+           (incf i startlen)
+           (case pos
+             ,@(mapcan (lambda (field-spec)
+                        (when (symbol-string= (car field-spec) "FIELD")
+                          (destructuring-bind (field name type position 
+                                                     &key 
+                                                     (default nil)
+                                                     (required nil)
+                                                     (repeated nil)
+                                                     (packed nil)
+                                                     (optional nil))
+                              field-spec
+                            (declare (ignore field default required optional))
+                            `((,position 
+                               (assert (= typecode ,(pb::wire-typecode type)))
+                               ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
+                               )))))
+                      field-specs)
+             (otherwise (error "Unhandled position, need to skip"))))))))
+
 
 (defun msg-defclass (form package)
   (destructuring-bind (message name &rest field-specs) form
@@ -337,7 +396,9 @@
    `(progn
       ,(msg-defclass form package)
       ,(def-packed-size form package)
-      ,(msg-defpack form package))))
+      ,(msg-defpack form package)
+      ,(def-unpack form package)
+      )))
   
 
 (defmacro compile-proto (name &optional (package *package*))
@@ -345,5 +406,7 @@
     `(progn
        ,(msg-defclass form package)
        ,(def-packed-size form package)
-       ,(msg-defpack form package))))
+       ,(msg-defpack form package)
+       ,(def-unpack form package)
+       )))
        

@@ -37,6 +37,7 @@
 (defpackage :binio
   (:use :cl)
   (:export 
+   :octet :octet-vector :make-octet-vector
    :decode-uint :decode-sint 
    :encode-int 
    :encode-double-float :decode-double-float
@@ -44,6 +45,7 @@
    :encode-uvarint :decode-uvarint
    :make-octet-vector :octet-vector
    :encode-utf8 :decode-utf8
+   :utf8-size
    ))
 
 ;; types u?int{8,16,32,63}, double, float
@@ -225,15 +227,17 @@
      do (setf (ldb (byte 7 (* i 7)) accum)
               (ldb (byte 7 0) (aref buffer j)))
      until (zerop (ldb (byte 1 7) (aref buffer j)))
-     finally (return accum)))
+     finally (return (values accum (1+ i)))))
 
 (defun encode-svarint (value &optional
                        (buffer (make-octet-vector (svarint-size value)))
                        (start 0))
-  (values (encode-uvarint (varint-zigzag value) buffer start) buffer))
+  (encode-uvarint (varint-zigzag value) buffer start))
 
 (defun decode-svarint (buffer start)
-  (varint-unzigzag (decode-uvarint buffer start)))
+  (multiple-value-bind (uv i)
+      (decode-uvarint buffer start)
+  (values (varint-unzigzag uv) i)))
 
 ;; strings
 
@@ -258,9 +262,11 @@
                                       :start buffer-start 
                                       :end buffer-end
                                       :external-format :utf8)))
-    (if string
-        (replace string str :start1 string-start)
-        str)))
+    (values (if string
+               (replace string str :start1 string-start)
+               str)
+            (- buffer-end buffer-start))))
+    
 
 
 (defun utf8-size (string)
@@ -269,7 +275,7 @@
     (declare (ignore buffer))
     size))
 
-(defun binio-test ()
+(defun test ()
   (labels ((test-uint (value endian bits)
              (let ((buffer (make-octet-vector (/ bits 8))))
                (encode-int value endian buffer 0 bits)
@@ -278,7 +284,6 @@
              (let ((buffer (make-octet-vector (/ bits 8))))
                (encode-int value endian buffer 0 bits)
                (= value (decode-sint buffer endian 0 bits))))
-
            (test-zigzag (original encoded)
              (and 
               (= (varint-zigzag original ) encoded)
@@ -289,19 +294,28 @@
                (and (= size (length expected-buffer))
                     (equalp buf expected-buffer))))
            (test-uvarint (value)
-             (let ((buffer (make-octet-vector 12)))
-               (encode-uvarint value buffer 0)
-               (= value (decode-uvarint buffer 0))))
+             (multiple-value-bind (i-enc buf)
+                 (encode-uvarint value)
+               (multiple-value-bind (v-dec i-dec)
+                   (decode-uvarint buf 0)
+                 (and (= i-dec i-enc)
+                      (= value v-dec)))))
            (test-svarint (value)
-             (let ((buffer (make-octet-vector 12)))
-               (encode-svarint value buffer 0)
-               (= value (decode-svarint buffer 0))))
-
+             (multiple-value-bind (i-enc buf)
+                 (encode-svarint value)
+               (multiple-value-bind (v-dec i-dec)
+                   (decode-svarint buf 0)
+                 (and (= i-dec i-enc)
+                      (= value v-dec)))))
            (test-utf8 (string expected-bytes)
              (multiple-value-bind (size bytes) 
                  (encode-utf8 string)
                (and (= size (length expected-bytes))
-                    (equalp bytes expected-bytes))))
+                    (equalp bytes expected-bytes)
+                    (multiple-value-bind (decoded-val decoded-size)
+                        (decode-utf8 bytes)
+                      (and (string= string decoded-val)
+                           (= decoded-size (length expected-bytes)))))))
            )
                
     ;; test integer encoding
