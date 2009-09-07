@@ -53,7 +53,8 @@
                 ((:bool) 'cl:t)
                 (:double 'cl:double-float)
                 (:string 'cl:string)
-                (:float 'cl:single-float))))
+                (:float 'cl:single-float)
+                (otherwise ident))))
     (if repeated 
         `(array ,base *)
         base)))
@@ -135,7 +136,10 @@
           (incf ,startsym 
                 (binio:encode-uvarint ,size ,bufsym ,startsym))
           (replace ,bufsym ,strbuf :start1 ,startsym)
-          (incf ,startsym  ,size))))))
+          (incf ,startsym  ,size))))
+    (otherwise ;; pack object
+     `(incf ,startsym
+            (pb::pack-length-delim ,valsym ,bufsym ,startsym)))))
 
 
 (defun gen-start-code-size (type pos)
@@ -327,10 +331,10 @@
     (declare (ignore message))
     `(defmethod pb::unpack (buffer
                             (protobuf ,(pb-sym name package))
-                            &optional (start 0))
+                            &optional (start 0) (end (length buffer)))
        (declare (binio:octet-vector buffer))
        (do ((i start))
-           ((>= i (length buffer)) (values protobuf (- i start)))
+           ((>= i end) (values protobuf (- i start)))
          (multiple-value-bind (pos typecode startlen)
              (pb::read-start-code buffer i)
            (incf i startlen)
@@ -397,7 +401,7 @@
       ,(msg-defclass form package)
       ,(def-packed-size form package)
       ,(msg-defpack form package)
-      ,(def-unpack form package)
+      ;,(def-unpack form package)
       )))
   
 
@@ -407,6 +411,6 @@
        ,(msg-defclass form package)
        ,(def-packed-size form package)
        ,(msg-defpack form package)
-       ,(def-unpack form package)
+       ;,(def-unpack form package)
        )))
        

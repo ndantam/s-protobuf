@@ -43,6 +43,10 @@
 
 (in-package :proto-test)
 
+
+;; The examples from :
+;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
+
 (defparameter *test-form-1* 
   '(message test1
     (field a :int32 1)))
@@ -50,6 +54,14 @@
 (defparameter *test-form-2* 
   '(message test2
     (field b :string 2)))
+
+(defparameter *test-form-3* 
+  '(message test3
+    (field c test1 3)))
+
+(defparameter *test-form-4* 
+  '(message test4
+    (field d :int32 4 :repeated t :packed t)))
 
 ;(macroexpand-1
 ;  '(protoc::compile-proto test2))
@@ -77,7 +89,10 @@
 (defun test ()
   (format t "package ~A~%" *package*)
   ;; test binio
-  (assert (binio::binio-test))
+  (assert (binio::test))
+
+  ;; Packing Tests
+
   ;; Test1 from 
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
   (protoc::eval-proto *test-form-1* (find-package :proto-test))
@@ -102,7 +117,29 @@
                                         ;(pb::pack x)
 
     t)
+  ;; Test 3
+  (let ((msg1 (make-instance 'proto-test::test1))
+        (msg3 (make-instance 'proto-test::test3))
+        )
+    (setf (slot-value msg1 'proto-test::a) 150)
+    (setf (slot-value msg3 'proto-test::c) msg1)
+    (assert (test-encoding msg3 5 
+                           (binio:octet-vector 
+                            #16r1a #16r03
+                            #16r08 #16r96 #16r01))))
 
+  ;; Test 4, repeated packed
+  (let ((x (make-instance 'test4 )))
+    (setf (slot-value x 'proto-test::d) (vector 3 270 86942))
+    (assert (= 8 (pb::packed-size x)))
+    (assert (test-encoding x 
+                           8 
+                           (binio:octet-vector #16r22 #16r06
+                                               #16r03 
+                                               #16r8e #16r02
+                                               #16r9e #16ra7 #16r5)))
+                                               
+    t)
   ;; string decoding
   (assert (string= "testing"
                    (pb::decode-string (binio:octet-vector 
@@ -116,7 +153,7 @@
     (assert (= 150 (slot-value msg1 'proto-test::a))))
 
   ;; unpack test 2
-  (let ((msg2 (make-instance 'protoc::test2)))
+  (let ((msg2 (make-instance 'test2)))
     (pb::unpack (binio:octet-vector 
                  #16r12
                  #16r07

@@ -44,7 +44,7 @@
 (defgeneric pack (protobuf &optional buf start))
 (defgeneric packed-size (protobuf))
 
-(defgeneric unpack (buffer protobuf &optional start))
+(defgeneric unpack (buffer protobuf &optional start end))
 
 
 (defparameter +types+ '(:double :float
@@ -122,16 +122,13 @@
   (encode-uvarint (make-start-code slot-position typecode)
                  buffer start))
 
-
-(defun proto-test ()
-  (labels ((test-start-code (type pos result)
-             (let ((buffer (make-octet-vector 1)))
-               (encode-start-code pos (wire-typecode type) buffer 0)
-               (equalp buffer (octet-vector result)))))
-    ;; from the google docs
-    (assert (test-start-code :int32 1 #16r08))
-    (assert (test-start-code :string 2 #16r12))
-    t))
+(defun pack-length-delim (protobuf buffer start)
+  (let* ((size (packed-size protobuf))
+         (size-size (binio:encode-uvarint size buffer start))
+         (encoded-size (pack protobuf buffer (+ start size-size))))
+    (assert (= size encoded-size))
+    (values (+ size-size encoded-size) buffer)))
+    
 
 (defun packed-uvarint-size (array)
   (loop for x across array 
@@ -181,3 +178,14 @@
 
 ;(defun packed-type-size (array type)
   ;)
+
+
+(defun proto-test ()
+  (labels ((test-start-code (type pos result)
+             (let ((buffer (make-octet-vector 1)))
+               (encode-start-code pos (wire-typecode type) buffer 0)
+               (equalp buffer (octet-vector result)))))
+    ;; from the google docs
+    (assert (test-start-code :int32 1 #16r08))
+    (assert (test-start-code :string 2 #16r12))
+    t))
