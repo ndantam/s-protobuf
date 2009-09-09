@@ -72,7 +72,7 @@
 
 (defun fixed32-p (type)
   (case type
-    ((:float :sfixed :fixed32) t)
+    ((:float :sfixed32 :fixed32) t)
     (otherwise nil)))
 
 

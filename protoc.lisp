@@ -124,10 +124,10 @@
              (binio:encode-svarint ,valsym ,bufsym ,startsym)))
     ((:fixed32 :sfixed32)
      `(incf ,startsym 
-             (binio:encode-int ,valsym :little ,startsym 32)))
+             (binio:encode-int ,valsym :little ,bufsym ,startsym 32)))
     ((:fixed64 :sfixed64)
      `(incf ,startsym 
-            (binio:encode-int ,valsym :little ,startsym 64)))
+            (binio:encode-int ,valsym :little ,bufsym ,startsym 64)))
     (:string
      (let ((strbuf (gensym))
            (size (gensym)))
@@ -165,7 +165,7 @@
     ((pb::fixed-p type) 
      `(* (length ,slot)
          (+ ,(gen-start-code-size type pos) 
-            ,(pb::fixed-size type) (length ,slot))))
+            ,(pb::fixed-size type))))
     (t 
      (let ((i (gensym))
            (accum (gensym)))
@@ -196,9 +196,9 @@
 (defun gen-slot-size (type objsym slot-name pos packed repeated)
   (let ((slot `(slot-value ,objsym ',slot-name)))
     (cond
-      ((not repeated)
+      ((and (not repeated) (not packed))
        (gen-scalar-size type slot pos))
-      ((not packed)
+      ((and repeated (not packed))
        (gen-repeated-size type slot pos))
       (packed
        (gen-packed-size type slot pos)))))
@@ -243,7 +243,7 @@
       ;; repeated unpacked value
       ((and repeated (not packed))
        (let ((countsym (gensym)))
-         `((dotimes (,countsym ,(length slot)) ; n times
+         `((dotimes (,countsym (length ,slot)) ; n times
              ;; write start code
              (incf ,startsym 
                    (pb::encode-start-code ,pos 
@@ -346,6 +346,11 @@
                                                           :end end)))
            (setf ,slot value)
            (incf ,startsym length))))
+      ((and repeated (not packed))
+       `((vector-push-extend ,(gen-unpack1 bufsym startsym type
+                                           (if (pb::primitive-type-p type) nil
+                                               `(make-instance ,type)))
+                             ,slot)))
       (t (error "can't handle this type")))))
 
 (defun def-unpack (form package)

@@ -107,7 +107,7 @@
     (dotimes (i count)
       (setf (ldb (byte 8 (* 8 i)) accum)
             (aref-endian buffer i start count endian)))
-    accum))
+    (values accum (/ bits 8))))
 
 
 (defun decode-sint (buffer endian &optional (start 0) (bits 32) )
@@ -117,7 +117,7 @@
         (count (/ bits 8)))
     (when (= (ldb (byte 1 (1- (* 8 count))) result) 1) ; sign bit, negative
       (decf result (ash 1 (* 8 count))))
-    result))
+    (values result (/ bits 8))))
 
 (defun encode-int (val endian &optional buffer (start 0) (bits 32))
   (declare (integer val)
@@ -128,7 +128,7 @@
     (dotimes (i count)
       (setf (aref-endian buffer i start count endian)
             (ldb (byte 8 (* i 8)) val)))
-    buffer))
+    (values (/ bits 8) buffer)))
 
 
 ;; floating point types

@@ -63,6 +63,11 @@
   '(message test4
     (field d :int32 4 :repeated t :packed t)))
 
+
+(defparameter *test-form-x1* 
+  '(message testx1
+    (field a :sfixed32 0 :repeated t :packed nil)))
+
 ;(macroexpand-1
 ;  '(protoc::compile-proto test2))
 
@@ -128,19 +133,26 @@
         (buffer-4 (binio:octet-vector #16r22 #16r06
                                       #16r03 
                                       #16r8e #16r02
-                                      #16r9e #16ra7 #16r5)))
-  ;; Packing Tests
+                                      #16r9e #16ra7 #16r5))
+
+        (buffer-x1 (binio:octet-vector 5 10 0 0 0
+                                       5 20 0 0 0)))
+          
+
+  ;; Packing Testsk
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
 
   (protoc::eval-proto *test-form-1* (find-package :proto-test))
   (protoc::eval-proto *test-form-2* (find-package :proto-test))
   (protoc::eval-proto *test-form-3* (find-package :proto-test))
+  (protoc::eval-proto *test-form-4* (find-package :proto-test))
+  (protoc::eval-proto *test-form-x1* (find-package :proto-test))
 
-  ;; test 1
+  ;; test 1 - varint
   (test-1 buffer-1 'test1 'a 150)
-  ;; test 2
+  ;; test 2 - string
   (test-1 buffer-2 'test2 'b "testing")
-  ;; test 3
+  ;; test 3 - embedded message
   (let ((value (make-instance 'test1)))
     (setf (slot-value value 'a) 150)
     (test-1 buffer-3 'test3 'c value 
@@ -148,21 +160,20 @@
                     (= (slot-value a 'a)
                        (slot-value b 'a)))))
 
-  ;(protoc::eval-proto *test-form-4* (find-package :proto-test))
-  ;; Test 4, repeated packed
-  (let ((x (make-instance 'test4 )))
-    (setf (slot-value x 'proto-test::d) (vector 3 270 86942))
-    (assert (= 8 (pb::packed-size x)))
-    (assert (test-encoding x 
-                           8 
-                           buffer-4))
-                                               
-    t)
-
+  ;; test 4 - repeated packed varint
   (test-1 buffer-4 'test4 'd 
           (make-array 3 
                       :element-type '(signed-byte 32)
                       :initial-contents '(3 270 86942)))
+
+  ;; Test x1 - repeated unpacked fixed32
+  (let ((msg (make-instance 'proto-test::testx1)))
+    (vector-push-extend 10 (slot-value msg 'proto-test::a))
+    (vector-push-extend 20 (slot-value msg 'proto-test::a))
+    (test-1 buffer-x1 'testx1 'a (vector 10 20)
+            :test (lambda (a b) (and (= (length a) (length b))
+                                     (= (aref a 0) (aref b 0))
+                                     (= (aref a 1) (aref b 1))))))
 
   t))
 
