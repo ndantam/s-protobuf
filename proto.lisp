@@ -107,13 +107,14 @@
         ((fixed64-p type) 8)
         (t (error "Not a fixed type: ~A" type))))
 
-(defun wire-typecode (type)
-  (cond 
-    ((varint-p type) 0)
-    ((fixed64-p type) 1)
-    ((fixed32-p type) 5)
-    ((length-delim-p type) 2)
-    (t 2)))
+(defun wire-typecode (type &optional repeated packed)
+  (if (and repeated packed) 2
+      (cond 
+        ((varint-p type) 0)
+        ((fixed64-p type) 1)
+        ((fixed32-p type) 5)
+        ((length-delim-p type) 2)
+        (t 2))))
 
 ;; runtime support functions
 
@@ -178,46 +179,54 @@ returns (values length length-of-length)"
          (setf ,start-place (+ ,isym ,len-len-sym))
          (values ,len-sym ,len-len-sym)))))
          
-(defun decode-string (buffer start)
-  (let ((i start))
-    (with-decoding (strlen strlen-len)
-        (decode-length-and-incf-start i buffer)
-      (with-decoding (str real-strlen)
-          (binio::decode-utf8 buffer 
-                              :buffer-start i 
-                              :buffer-end (+ i strlen))
-        (assert (= strlen real-strlen))
-        (values str (+ strlen-len strlen))))))
-
-(defun unpack-embedded-protobuf (buffer protobuf start)
+(defun decode-length-delim (buffer start decoder)
+  "decoder is (lambda (buffer start end)"
   (let ((i start))
     (with-decoding (len len-len)
         (decode-length-and-incf-start i buffer)
-      (with-decoding (protobuf real-len)
-        (unpack buffer protobuf i (+ i len))
-        (assert (= len real-len))
-        (values protobuf (+ len-len real-len))))))
+      (with-decoding (val val-len)
+          (funcall decoder buffer i (+ i len))
+        (assert (= val-len len))
+        (values val (+ len len-len))))))
 
-(defmacro apply-decode (start-place buffer decoder 
-                        &optional protobuf)
-  (let ((valsym (gensym))
-        (lensym (gensym))
-        (bufsym (gensym))
-        (startsym (gensym)))
-    `(let ((,bufsym ,buffer)
-           (,startsym ,start-place))
-       (with-decoding (,valsym ,lensym)
-           (,decoder ,bufsym 
-                     ,@(if protobuf 
-                           (list protobuf) 
-                           (list startsym)))
-         (setf ,start-place (+ ,startsym ,lensym))
-         ,valsym))))
-         
+(defun decode-string (buffer start)
+  (decode-length-delim buffer start 
+                       (lambda (buffer start end)
+                         (binio::decode-utf8 buffer 
+                                             :buffer-start start 
+                                             :buffer-end end))))
 
-;(defun packed-type-size (array type)
-  ;)
+(defun unpack-embedded-protobuf (buffer protobuf start)
+  (decode-length-delim buffer start
+                       (lambda (buffer start end)
+                         (unpack buffer protobuf start end))))
 
+
+(defun decode-array (type decoder buffer &key 
+                     (fixed-bit-size nil) 
+                     (start 0) 
+                     end )
+  (assert (or (not fixed-bit-size) 
+              (zerop (rem fixed-bit-size 8))) ()
+              "Can only decode integral-octet-sized types")
+  (let ((end (or end (length buffer))))
+    (let* ((array (make-array (if fixed-bit-size
+                                  (/ (- end start)
+                                     (/ fixed-bit-size 8))
+                                  0)
+                              :element-type type
+                              :adjustable (not fixed-bit-size)
+                              :fill-pointer (not fixed-bit-size))))
+      (do ((i start)
+           (j 0 (1+ j)))
+          ((>= i end) (values array (- i start)))
+        (multiple-value-bind (value length)
+            (funcall decoder buffer i)
+          (incf i (if fixed-bit-size (/ fixed-bit-size 8) length))
+          (if fixed-bit-size
+              (setf (aref array j) value)
+              (vector-push-extend value array)))))))
+                     
 
 (defun proto-test ()
   (labels ((test-start-code (type pos result)

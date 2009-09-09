@@ -298,38 +298,55 @@
                         field-specs)
            (values (- ,i ,start) ,buffer))))))
 
+(defun get-decoder-name (protobuf-type)
+  (case protobuf-type
+    ((:int32 :uint32 :uint64 :enum)
+     'binio::decode-uvarint)
+    ((:sint32)
+     'binio::decode-svarint)
+    ((:fixed32)
+     'pb::decode-uint32)
+    ((:sfixed32)
+     'pb::decode-sint32)
+    ((:fixed64 )
+     'pb::decode-uint64)
+    ((:sfixed64)
+     'pb::decode-sint64)
+    (:string
+     'pb::decode-string)
+    (otherwise 
+     (error "Can't handle this type: ~A" protobuf-type))))
 
 (defun gen-unpack1 (bufsym startsym type placesym)
       `(pb::with-decoding (value length)
            ,(if (pb::primitive-type-p type)
-                `(,(case type
-                         ((:int32 :uint32 :uint64 :enum)
-                          'binio::decode-uvarint)
-                         ((:sint32)
-                          'binio::decode-svarint)
-                         ((:fixed32)
-                          'pb::decode-uint32)
-                         ((:sfixed32)
-                          'pb::decode-sint32)
-                         ((:fixed64 )
-                          'pb::decode-uint64)
-                         ((:sfixed64)
-                          'pb::decode-sint64)
-                         (:string
-                          'pb::decode-string)
-                         (otherwise 
-                          (error "Can't handle this type: ~A" type)))
+                `(,(get-decoder-name type)
                    ,bufsym ,startsym)
                 `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym))
          (incf ,startsym length)
          value))
 
 (defun gen-unpacker (bufsym startsym objsym name type repeated packed)
-  (cond 
-    ((and (not repeated) (not packed))
-     (let ((slot  `(slot-value ,objsym ',name)))
-       `((setf ,slot ,(gen-unpack1 bufsym startsym  type slot)))))
-    (t (error "can't handle this type"))))
+  (let ((slot  `(slot-value ,objsym ',name)))
+    (cond 
+      ((and (not repeated) (not packed))
+       `((setf ,slot ,(gen-unpack1 bufsym startsym  type slot))))
+      ((and repeated packed)
+       `((pb::with-decoding (value length)
+             (pb::decode-length-delim ,bufsym ,startsym 
+                                      (lambda (buffer start end)
+                                        (pb::decode-array ',(lisp-type type)
+                                                          #',(get-decoder-name type)
+                                                          buffer
+                                                          :fixed-bit-size 
+                                                          ,(when (pb::fixed-p type)
+                                                                 (* 8 (pb::fixed-size 
+                                                                       type)))
+                                                          :start start
+                                                          :end end)))
+           (setf ,slot value)
+           (incf ,startsym length))))
+      (t (error "can't handle this type")))))
 
 (defun def-unpack (form package)
   (destructuring-bind (message name &rest field-specs) form
@@ -356,19 +373,29 @@
                               field-spec
                             (declare (ignore field default required optional))
                             `((,position 
-                               (assert (= typecode ,(pb::wire-typecode type)))
+                               (assert (= typecode ,(pb::wire-typecode type
+                                                                       repeated packed)))
                                ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
                                )))))
                       field-specs)
              (otherwise (error "Unhandled position, need to skip"))))))))
 
 
-(defun gen-init-form (type)
-    (cond ((pb::integer-type-p type) 0)
-          ((eq type :string) nil)
-          ((eq type :double) 0d0)
-          ((eq type :float) 0s0)
-          (t `(make-instance ',type))))
+(defun gen-init-form (type repeated packed)
+  (cond 
+    ((and (not repeated) (not packed))
+     (cond ((pb::integer-type-p type) 0)
+           ((eq type :string) nil)
+           ((eq type :double) 0d0)
+           ((eq type :float) 0s0)
+           (t `(make-instance ',type))))
+    ((and repeated packed)
+     nil)
+    ((and repeated (not packed))
+     `(make-array 0 :element-type ',(lisp-type type) :fill-pointer t))
+    (t (error "Cant make init form for packed, nonrepeated elements"))))
+          
+      
 
 
 (defun msg-defclass (form package)
@@ -386,10 +413,10 @@
                                                (packed nil)
                                                (optional nil))
                         field-spec
-                      (declare (ignore position field packed default required optional))
+                      (declare (ignore position field default required optional))
                       `((,name 
                          :type ,(lisp-type type repeated)
-                         :initform ,(gen-init-form type))))))
+                         :initform ,(gen-init-form type repeated packed))))))
                 field-specs))))
 
 

@@ -134,6 +134,7 @@
 
   (protoc::eval-proto *test-form-1* (find-package :proto-test))
   (protoc::eval-proto *test-form-2* (find-package :proto-test))
+  (protoc::eval-proto *test-form-3* (find-package :proto-test))
 
   ;; test 1
   (test-1 buffer-1 'test1 'a 150)
@@ -157,6 +158,11 @@
                            buffer-4))
                                                
     t)
+
+  (test-1 buffer-4 'test4 'd 
+          (make-array 3 
+                      :element-type '(signed-byte 32)
+                      :initial-contents '(3 270 86942)))
 
   t))
 
