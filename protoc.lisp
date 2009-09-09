@@ -299,31 +299,36 @@
            (values (- ,i ,start) ,buffer))))))
 
 
-(defun gen-unpack1 (bufsym startsym placesym type)
-    `(setf ,placesym 
-           (pb::apply-decode ,startsym ,bufsym 
-                             ,(case type
-                               ((:int32 :uint32 :uint64 :enum)
-                                'binio::decode-uvarint)
-                               ((:sint32)
-                                'binio::decode-svarint)
-                               ((:fixed32)
-                                'pb::decode-uint32)
-                               ((:sfixed32)
-                                'pb::decode-sint32)
-                               ((:fixed64 )
-                                'pb::decode-uint64)
-                               ((:sfixed64)
-                                'pb::decode-sint64)
-                               (:string
-                                'pb::decode-string)
-                               (otherwise 
-                                (error "Unknown type: ~A" type))))))
+(defun gen-unpack1 (bufsym startsym type placesym)
+      `(pb::with-decoding (value length)
+           ,(if (pb::primitive-type-p type)
+                `(,(case type
+                         ((:int32 :uint32 :uint64 :enum)
+                          'binio::decode-uvarint)
+                         ((:sint32)
+                          'binio::decode-svarint)
+                         ((:fixed32)
+                          'pb::decode-uint32)
+                         ((:sfixed32)
+                          'pb::decode-sint32)
+                         ((:fixed64 )
+                          'pb::decode-uint64)
+                         ((:sfixed64)
+                          'pb::decode-sint64)
+                         (:string
+                          'pb::decode-string)
+                         (otherwise 
+                          (error "Can't handle this type: ~A" type)))
+                   ,bufsym ,startsym)
+                `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym))
+         (incf ,startsym length)
+         value))
 
 (defun gen-unpacker (bufsym startsym objsym name type repeated packed)
   (cond 
     ((and (not repeated) (not packed))
-     (list (gen-unpack1 bufsym startsym `(slot-value ,objsym ',name) type)))
+     (let ((slot  `(slot-value ,objsym ',name)))
+       `((setf ,slot ,(gen-unpack1 bufsym startsym  type slot)))))
     (t (error "can't handle this type"))))
 
 (defun def-unpack (form package)
@@ -358,6 +363,14 @@
              (otherwise (error "Unhandled position, need to skip"))))))))
 
 
+(defun gen-init-form (type)
+    (cond ((pb::integer-type-p type) 0)
+          ((eq type :string) nil)
+          ((eq type :double) 0d0)
+          ((eq type :float) 0s0)
+          (t `(make-instance ',type))))
+
+
 (defun msg-defclass (form package)
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
@@ -375,7 +388,8 @@
                         field-spec
                       (declare (ignore position field packed default required optional))
                       `((,name 
-                         :type ,(lisp-type type repeated))))))
+                         :type ,(lisp-type type repeated)
+                         :initform ,(gen-init-form type))))))
                 field-specs))))
 
 
@@ -401,7 +415,7 @@
       ,(msg-defclass form package)
       ,(def-packed-size form package)
       ,(msg-defpack form package)
-      ;,(def-unpack form package)
+      ,(def-unpack form package)
       )))
   
 

@@ -86,60 +86,29 @@
 (protoc::eval-proto *test-form-1* (find-package :proto-test))
 (protoc::eval-proto *test-form-2* (find-package :proto-test))
 
+(defun test-1 (test-buffer type slot slot-value &key (test #'equalp))
+  (let ((enc-inst (make-instance type))
+        (dec-inst (make-instance type)))
+    (setf (slot-value enc-inst slot) slot-value)
+    ;; test encoding
+    (multiple-value-bind (length buffer)
+        (pb:pack enc-inst)
+      (assert (= length (length test-buffer) (length buffer)))
+      (assert (equalp buffer test-buffer)))
+    ;; test decoding
+    (multiple-value-bind (dec-inst* length)
+        (pb:unpack test-buffer dec-inst)
+      (assert (= length (length test-buffer)))
+      (assert (eq dec-inst* dec-inst))
+      (assert (funcall test slot-value (slot-value dec-inst slot))))))
+
 (defun test ()
   (format t "package ~A~%" *package*)
   ;; test binio
   (assert (binio::test))
 
-  ;; Packing Tests
 
-  ;; Test1 from 
-  ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
-  (protoc::eval-proto *test-form-1* (find-package :proto-test))
-  (let ((x (make-instance 'test1 )))
-    (setf (slot-value x 'a) 150)
-    (slot-value x 'a)
-    (assert (= 3 (pb::packed-size x)))
-    (assert (test-encoding x 3 (binio:octet-vector #16r8 #16r96 #16r1)))
-    t)
-  ;; Test2 from 
-  ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
-  (protoc::eval-proto *test-form-2* (find-package :proto-test))
-  (let ((x (make-instance 'test2))
-        );(size 9))
-    (setf (slot-value x 'b) "testing")
-    (assert (= 9 (pb::packed-size x)))
-    (assert (test-encoding x 9 
-                           (binio:octet-vector 
-                            #16r12 #16r07
-                            #16r74 #16r65 #16r73 
-                            #16r74 #16r69 #16r6e #16r67)))
-                                        ;(pb::pack x)
 
-    t)
-  ;; Test 3
-  (let ((msg1 (make-instance 'proto-test::test1))
-        (msg3 (make-instance 'proto-test::test3))
-        )
-    (setf (slot-value msg1 'proto-test::a) 150)
-    (setf (slot-value msg3 'proto-test::c) msg1)
-    (assert (test-encoding msg3 5 
-                           (binio:octet-vector 
-                            #16r1a #16r03
-                            #16r08 #16r96 #16r01))))
-
-  ;; Test 4, repeated packed
-  (let ((x (make-instance 'test4 )))
-    (setf (slot-value x 'proto-test::d) (vector 3 270 86942))
-    (assert (= 8 (pb::packed-size x)))
-    (assert (test-encoding x 
-                           8 
-                           (binio:octet-vector #16r22 #16r06
-                                               #16r03 
-                                               #16r8e #16r02
-                                               #16r9e #16ra7 #16r5)))
-                                               
-    t)
   ;; string decoding
   (assert (string= "testing"
                    (pb::decode-string (binio:octet-vector 
@@ -147,20 +116,47 @@
                                        #16r74 #16r65 #16r73 
                                        #16r74 #16r69 #16r6e #16r67)
                                       1)))
-  ;; unpack test 1
-  (let ((msg1 (make-instance 'test1)))
-    (pb::unpack (binio::octet-vector 8 150 1) msg1)
-    (assert (= 150 (slot-value msg1 'proto-test::a))))
 
-  ;; unpack test 2
-  (let ((msg2 (make-instance 'test2)))
-    (pb::unpack (binio:octet-vector 
-                 #16r12
-                 #16r07
-                 #16r74 #16r65 #16r73 
-                 #16r74 #16r69 #16r6e #16r67)
-                msg2)
-    (assert (string= "testing" 
-                     (slot-value msg2 'b))))
-  t)
+  (let ((buffer-1 (binio:octet-vector #16r8 #16r96 #16r1))
+        (buffer-2 (binio:octet-vector 
+                   #16r12 #16r07
+                   #16r74 #16r65 #16r73 
+                   #16r74 #16r69 #16r6e #16r67))
+        (buffer-3 (binio:octet-vector 
+                   #16r1a #16r03
+                   #16r08 #16r96 #16r01))
+        (buffer-4 (binio:octet-vector #16r22 #16r06
+                                      #16r03 
+                                      #16r8e #16r02
+                                      #16r9e #16ra7 #16r5)))
+  ;; Packing Tests
+  ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
+
+  (protoc::eval-proto *test-form-1* (find-package :proto-test))
+  (protoc::eval-proto *test-form-2* (find-package :proto-test))
+
+  ;; test 1
+  (test-1 buffer-1 'test1 'a 150)
+  ;; test 2
+  (test-1 buffer-2 'test2 'b "testing")
+  ;; test 3
+  (let ((value (make-instance 'test1)))
+    (setf (slot-value value 'a) 150)
+    (test-1 buffer-3 'test3 'c value 
+            :test (lambda (a b)
+                    (= (slot-value a 'a)
+                       (slot-value b 'a)))))
+
+  ;(protoc::eval-proto *test-form-4* (find-package :proto-test))
+  ;; Test 4, repeated packed
+  (let ((x (make-instance 'test4 )))
+    (setf (slot-value x 'proto-test::d) (vector 3 270 86942))
+    (assert (= 8 (pb::packed-size x)))
+    (assert (test-encoding x 
+                           8 
+                           buffer-4))
+                                               
+    t)
+
+  t))
 
