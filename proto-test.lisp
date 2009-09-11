@@ -63,11 +63,13 @@
 (protoc::def-proto-msg testx1
   (field a :sfixed32 0 :repeated t :packed nil))
 
+(macroexpand-1 '
 
 (protoc::def-proto-msg testx2
   (enum e (:a 0) (:b 10) (:c 20))
   (field a testx2-e 0 :repeated nil :packed nil))
 
+)
 
 (defun re-def () 
   (protoc::def-proto-msg test1
@@ -95,7 +97,7 @@
 ;(protoc::def-packed-size *test-form-1* *package*)
 ;(protoc::msg-defpack *test-form-1* *package*)
 
-(protoc::msg-defpack *test-form-2* *package*)
+;(protoc::msg-defpack *test-form-2* *package*)
 
 (defun oct->hex (array)
   (map 'vector (lambda (elt)
@@ -206,6 +208,11 @@
 
 
 
-  (let ((msg (make-instance 'testx2)))
-    (setf (slot-value msg 'a) :a)
-    (pb::packed-size msg))
+(let ((msg (make-instance 'testx2))
+      (msg-u (make-instance 'testx2)))
+  (setf (slot-value msg 'a) :b)
+  (multiple-value-bind (len buf)
+      (pb::pack msg)
+    ;(values len buf)))
+    (pb::unpack buf msg-u)))
+

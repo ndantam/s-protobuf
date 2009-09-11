@@ -1,10 +1,16 @@
 This packagage, s-protobuf, provides a Common Lisp implemenation for
 the Protocol Buffers data encoding format, created by Google.
 
+
 * Implementation Notes    *
 
 - The varint handling code supports arbitrary precision.
 - We don't track unknown fields
+
+
+* See Also *
+
+- description of encoding format in doc.txt
 
 * Missing Features *
 

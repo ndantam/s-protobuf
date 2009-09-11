@@ -66,10 +66,13 @@
 (deftype start-code () '(integer 0 5))
 
 
+(defun enum-type-p (sym)
+  (get sym 'protoc::enum))
+
 (defun primitive-type-p (type)
   (or
    (find type +types+ :test #'eq)
-   (protoc::enum-type-p type)))
+   (enum-type-p type)))
 
 (defun fixed64-p (type)
   (case type
@@ -94,7 +97,7 @@
 
 (defun varint-enum-p (type)
   (or (varint-p type)
-      (protoc::enum-type-p type)))
+      (enum-type-p type)))
 
 (defun svarint-p (type)
   (case type
@@ -169,6 +172,12 @@
 (defun length-delim-size (length)
   (+ (binio::uvarint-size length) length))
 
+
+;; encoders
+(defun encode-bool (val buffer start)
+  (setf (aref buffer start) (if val 1 0))
+  1)
+
 ;; fixed-width decoders
 (defun decode-uint32 (buffer start)
   (binio:decode-uint buffer :little start 32))
@@ -178,7 +187,18 @@
   (binio:decode-uint buffer :little start 64))
 (defun decode-sint64 (buffer start)
   (binio:decode-sint buffer :little start 64))
+(defun decode-double (buffer start)
+  (binio:decode-double-float buffer 
+                             :little start))
 
+(defun decode-bool (buffer start)
+  (values (case (aref buffer start)
+            (0 nil)
+            (1 t)
+            (otherwise 
+             (error "Invalid boolean valude")))
+          1))
+        
 
 (defmacro decode-length-and-incf-start (start-place buffer)
   "reads the length field, 

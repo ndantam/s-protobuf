@@ -65,7 +65,7 @@
                 ((:uint32 :fixed32) '(cl:unsigned-byte 32))
                 ((:int64 :sfixed64 :sint64) '(cl:signed-byte 64))
                 ((:uint64 :fixed64) '(cl:unsigned-byte 64))
-                ((:bool) 'cl:t)
+                ((:bool) 'cl:boolean)
                 (:double 'cl:double-float)
                 (:string 'cl:string)
                 (:float 'cl:single-float)
@@ -137,6 +137,10 @@
          ,(case type
                 ((:int32 :uint32 :uint64 :enum)
                  `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
+                (:bool
+                 `(pb::encode-bool ,valsym 
+                                   ,bufsym 
+                                   ,startsym))
                 ((:sint32 :sint64)
                  `(binio:encode-svarint ,valsym ,bufsym ,startsym))
                 ((:fixed32 :sfixed32)
@@ -167,6 +171,7 @@
       ,(cond 
         ((pb::fixed64-p type) 8)
         ((pb::fixed32-p type) 4)
+        ((eq :bool type) 1)
         ((pb::uvarint-p type)
          `(binio::uvarint-size ,slot))
         ((pb::svarint-p type) 
@@ -202,6 +207,7 @@
          (cond 
            ((pb::fixed64-p type) `(* 8 (length ,slot)))
            ((pb::fixed32-p type) `(* 4 (length ,slot)))
+           ((eq :bool type) `(length ,slot))
            ((pb::uvarint-p type) 
             `(pb::packed-uvarint-size ,slot))
            ((pb::svarint-p type) 
@@ -322,7 +328,7 @@
   (case protobuf-type
     ((:int32 :uint32 :uint64 :enum)
      'binio::decode-uvarint)
-    ((:sint32)
+    ((:sint32 :sint64)
      'binio::decode-svarint)
     ((:fixed32)
      'pb::decode-uint32)
@@ -334,6 +340,10 @@
      'pb::decode-sint64)
     (:string
      'pb::decode-string)
+    (:double
+     'pb::decode-double)
+    (:bool
+     'pb::decode-bool)
     (otherwise 
      (if (enum-type-p protobuf-type)
          (symcat protobuf-type 'decode)
@@ -372,7 +382,7 @@
       ((and repeated (not packed))
        `((vector-push-extend ,(gen-unpack1 bufsym startsym type
                                            (if (pb::primitive-type-p type) nil
-                                               `(make-instance ,type)))
+                                               `(make-instance ',type)))
                              ,slot)))
       (t (error "can't handle this type")))))
 
@@ -414,6 +424,7 @@
     ((and (not repeated) (not packed))
      (cond ((pb::integer-type-p type)  0)
            ((eq type :string) nil)
+           ((eq type :bool) nil)
            ((eq type :double) 0d0)
            ((eq type :float) 0s0)
            ((enum-type-p type) nil)
@@ -472,11 +483,12 @@
 (defun msg-defclass (form package)
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
-    `(cl:defclass ,(pb-sym name package) ()
+    `((cl:defclass ,(pb-sym name package) () ())
+      (cl:defclass ,(pb-sym name package) ()
        ;; slots
        ,(mapcan (lambda (field-spec)
                   (when (symbol-string= (car field-spec) "FIELD")
-                    (destructuring-bind (field name type position 
+                    (destructuring-bind (field field-name type position 
                                                &key 
                                                (default nil)
                                                (required nil)
@@ -485,10 +497,10 @@
                                                (optional nil))
                         field-spec
                       (declare (ignore position field default required optional))
-                      `((,name 
+                      `((,field-name 
                          :type ,(lisp-type type repeated)
                          :initform ,(gen-init-form type repeated packed))))))
-                field-specs))))
+                field-specs)))))
 
 
 
@@ -510,7 +522,7 @@
 (defun eval-proto (form &optional (package *package*))
   (eval 
    `(progn
-      ,(msg-defclass form package)
+      ,@(msg-defclass form package)
       ,(def-packed-size form package)
       ,(msg-defpack form package)
       ,(def-unpack form package)
@@ -521,7 +533,7 @@
   (let ((form `(message ,name ,@body)))
     `(progn
        ,@(msg-def-enums name body) 
-       ,(msg-defclass form *package*)
+       ,@(msg-defclass form *package*)
        ,(def-packed-size form *package*)
        ,(msg-defpack form *package*)
        ,(def-unpack form *package*))))
