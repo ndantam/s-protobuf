@@ -38,11 +38,26 @@
 
 (defpackage :protocol-buffer-compiler
   (:nicknames :protoc)
+  (:export :def-proto-msg)
   (:use :cl))
 
 (in-package :protocol-buffer-compiler)
 
 (defparameter *message-plist-sym* 'message)
+
+(defun symcat (package-or-sym &rest symbols)
+  (intern (reduce (lambda (a b) 
+                    (concatenate 'string (string a) "-" (string b)))
+                  (if (symbolp package-or-sym) 
+                      (cons package-or-sym symbols)
+                      symbols))
+          (cond 
+            ((packagep package-or-sym) package-or-sym)
+            ((symbolp package-or-sym) (symbol-package package-or-sym))
+            (t (error "Can't find package for ~A" package-or-sym)))))
+
+(defun enum-type-p (sym)
+  (get sym 'enum))
 
 (defun lisp-type (ident &optional repeated)
   (let ((base (case ident
@@ -54,7 +69,10 @@
                 (:double 'cl:double-float)
                 (:string 'cl:string)
                 (:float 'cl:single-float)
-                (otherwise ident))))
+                (otherwise 
+                 (if (enum-type-p ident)
+                     'cl:symbol 
+                     ident)))))
     (if repeated 
         `(array ,base *)
         base)))
@@ -115,31 +133,30 @@
     ;(repeated (make-array 0 :elment-type
 
 (defun gen-pack1 (bufsym startsym valsym type)
-  (case type
-    ((:int32 :uint32 :uint64 :enum)
-     `(incf ,startsym 
-             (binio:encode-uvarint ,valsym ,bufsym ,startsym)))
-    ((:sint32 :sint64)
-     `(incf ,startsym 
-             (binio:encode-svarint ,valsym ,bufsym ,startsym)))
-    ((:fixed32 :sfixed32)
-     `(incf ,startsym 
-             (binio:encode-int ,valsym :little ,bufsym ,startsym 32)))
-    ((:fixed64 :sfixed64)
-     `(incf ,startsym 
-            (binio:encode-int ,valsym :little ,bufsym ,startsym 64)))
-    (:string
-     (let ((strbuf (gensym))
-           (size (gensym)))
-       `(multiple-value-bind (,size ,strbuf)
-            (binio::encode-utf8 ,valsym)
-          (incf ,startsym 
-                (binio:encode-uvarint ,size ,bufsym ,startsym))
-          (replace ,bufsym ,strbuf :start1 ,startsym)
-          (incf ,startsym  ,size))))
-    (otherwise ;; pack object
-     `(incf ,startsym
-            (pb::pack-length-delim ,valsym ,bufsym ,startsym)))))
+  `(incf ,startsym
+         ,(case type
+                ((:int32 :uint32 :uint64 :enum)
+                 `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
+                ((:sint32 :sint64)
+                 `(binio:encode-svarint ,valsym ,bufsym ,startsym))
+                ((:fixed32 :sfixed32)
+                 `(binio:encode-int ,valsym :little ,bufsym ,startsym 32))
+                ((:fixed64 :sfixed64)
+                 `(binio:encode-int ,valsym :little ,bufsym ,startsym 64))
+                (:string
+                 (let ((strbuf (gensym))
+                       (size (gensym)))
+                   `(multiple-value-bind (,size ,strbuf)
+                        (binio::encode-utf8 ,valsym)
+                      (incf ,startsym 
+                            (binio:encode-uvarint ,size ,bufsym ,startsym))
+                      (replace ,bufsym ,strbuf :start1 ,startsym)
+                      ,size)))
+                (otherwise ;; pack object
+                 (if (enum-type-p type)
+                     `(binio:encode-uvarint (,(symcat type 'code) ,valsym)
+                                            ,bufsym ,startsym)
+                     `(pb::pack-embedded ,valsym ,bufsym ,startsym))))))
 
 
 (defun gen-start-code-size (type pos)
@@ -150,10 +167,12 @@
       ,(cond 
         ((pb::fixed64-p type) 8)
         ((pb::fixed32-p type) 4)
-        ((pb::uvarint-p type) 
+        ((pb::uvarint-p type)
          `(binio::uvarint-size ,slot))
         ((pb::svarint-p type) 
-         `(pb::uvarint-size ,slot))
+         `(binio::svarint-size ,slot))
+        ((enum-type-p type) 
+         `(binio::uvarint-size (,(symcat type 'code) ,slot)))
         ((eq :string type)
          `(pb::length-delim-size (binio::utf8-size ,slot)))
         ((eq :bytes type)
@@ -187,6 +206,8 @@
             `(pb::packed-uvarint-size ,slot))
            ((pb::svarint-p type) 
             `(pb::packed-uvarint-size ,slot))
+           ((enum-type-p type) 
+            `(pb::packed-enum-size #',(symcat type 'code) ,slot))
            (t (error "Can't pack this type")))))
     (if pos
         `(+ ,(gen-start-code-size :bytes pos) 
@@ -223,8 +244,7 @@
                             (list (gen-slot-size type protobuf  name position 
                                                  packed repeated))
                             )))
-                      field-specs))
-         ))))
+                      field-specs))))))
  
          
 (defun gen-pack-slot (bufsym startsym objsym name pos type repeated packed)
@@ -315,14 +335,17 @@
     (:string
      'pb::decode-string)
     (otherwise 
-     (error "Can't handle this type: ~A" protobuf-type))))
+     (if (enum-type-p protobuf-type)
+         (symcat protobuf-type 'decode)
+         (error "Can't handle this type: ~A" protobuf-type)))))
 
 (defun gen-unpack1 (bufsym startsym type placesym)
       `(pb::with-decoding (value length)
-           ,(if (pb::primitive-type-p type)
-                `(,(get-decoder-name type)
-                   ,bufsym ,startsym)
-                `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym))
+           ,(cond 
+             ((pb::primitive-type-p type)
+              `(,(get-decoder-name type)
+                 ,bufsym ,startsym))
+             (t `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym)))
          (incf ,startsym length)
          value))
 
@@ -389,10 +412,11 @@
 (defun gen-init-form (type repeated packed)
   (cond 
     ((and (not repeated) (not packed))
-     (cond ((pb::integer-type-p type) 0)
+     (cond ((pb::integer-type-p type)  0)
            ((eq type :string) nil)
            ((eq type :double) 0d0)
            ((eq type :float) 0s0)
+           ((enum-type-p type) nil)
            (t `(make-instance ',type))))
     ((and repeated packed)
      nil)
@@ -400,8 +424,50 @@
      `(make-array 0 :element-type ',(lisp-type type) :fill-pointer t))
     (t (error "Cant make init form for packed, nonrepeated elements"))))
           
-      
+    
+(defun gen-enum (enum-name enums)
+  (setf (get enum-name 'enum) t)
+  (labels ((map-enums (function enums)
+             (mapcar (lambda (e) (funcall function (car e) (cadr e))) enums)))
+    (let ((sym (gensym))
+          (code (gensym))
+          (buffer (gensym))
+          (start (gensym))
+          (value (gensym))
+          (length (gensym))
+          (enum-symbol (symcat enum-name 'symbol)))
+      `((defun ,enum-symbol (,code)
+          (case ,code
+            ,@(map-enums (lambda (symbol code) `(,code ,symbol)) enums)
+            (otherwise (error "Unknown enum ~A code: ~A" ',enum-name ,code))))
+        (defun ,(symcat enum-name 'code) (,sym)
+          (case ,sym
+            ,@(map-enums (lambda (symbol code) `(,symbol ,code)) enums)
+            (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name ,sym))))
+        (defun ,(symcat enum-name 'decode) (,buffer ,start)
+            (pb::with-decoding (,value ,length)
+                (binio:decode-uvarint ,buffer ,start)
+              (values (,enum-symbol ,value) ,length)))))))
+        
+ 
 
+;;    `((defmethod pb::enum-symbol ((enum-name (eql ',enum-name)) (enum-code integer))
+;;        (case enum-code
+;;          ,@(map-enums (lambda (symbol code) `(,code ,symbol)) enums)
+;;          (otherwise (error "Unknown enum ~A code: ~A" ',enum-name enum-code))))
+;;      (defmethod pb::enum-code ((enum-name (eql ',enum-name)) (enum-symbol symbol))
+;;        (case enum-symbol
+;;          ,@(map-enums (lambda (symbol code) `(,symbol ,code)) enums)
+;;          (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name enum-symbol)))))))
+        
+  
+(defun msg-def-enums (msg-name specs)
+  (mapcan (lambda (spec)
+            (when (symbol-string= (car spec) 'enum)
+              (gen-enum (symcat (symbol-package msg-name) 
+                                msg-name (cadr spec))
+                        (cddr spec))))
+          specs))
 
 (defun msg-defclass (form package)
   (destructuring-bind (message name &rest field-specs) form
@@ -450,6 +516,15 @@
       ,(def-unpack form package)
       )))
   
+
+(defmacro def-proto-msg (name &body body)
+  (let ((form `(message ,name ,@body)))
+    `(progn
+       ,@(msg-def-enums name body) 
+       ,(msg-defclass form *package*)
+       ,(def-packed-size form *package*)
+       ,(msg-defpack form *package*)
+       ,(def-unpack form *package*))))
 
 (defmacro compile-proto (name &optional (package *package*))
   (let ((form (get name 'message)))

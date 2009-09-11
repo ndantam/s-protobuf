@@ -47,26 +47,47 @@
 ;; The examples from :
 ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
 
-(defparameter *test-form-1* 
-  '(message test1
-    (field a :int32 1)))
 
-(defparameter *test-form-2* 
-  '(message test2
-    (field b :string 2)))
+(protoc::def-proto-msg test1
+  (field a :int32 1))
 
-(defparameter *test-form-3* 
-  '(message test3
-    (field c test1 3)))
+(protoc::def-proto-msg test2
+  (field b :string 2))
 
-(defparameter *test-form-4* 
-  '(message test4
-    (field d :int32 4 :repeated t :packed t)))
+(protoc::def-proto-msg test3
+  (field c test1 3))
+
+(protoc::def-proto-msg test4
+  (field d :int32 4 :repeated t :packed t))
+
+(protoc::def-proto-msg testx1
+  (field a :sfixed32 0 :repeated t :packed nil))
 
 
-(defparameter *test-form-x1* 
-  '(message testx1
-    (field a :sfixed32 0 :repeated t :packed nil)))
+(protoc::def-proto-msg testx2
+  (enum e (:a 0) (:b 10) (:c 20))
+  (field a testx2-e 0 :repeated nil :packed nil))
+
+
+(defun re-def () 
+  (protoc::def-proto-msg test1
+    (field a :int32 1))
+  
+  (protoc::def-proto-msg test2
+    (field b :string 2))
+  
+  (protoc::def-proto-msg test3
+    (field c test1 3))
+  
+  (protoc::def-proto-msg test4
+    (field d :int32 4 :repeated t :packed t))
+  
+  (protoc::def-proto-msg testx1
+    (field a :sfixed32 0 :repeated t :packed nil))
+  (protoc::def-proto-msg testx2
+    (enum e (:a 0) (:b 10) (:c 20))
+    (field a testx2-e 0 :repeated nil :packed nil))
+)
 
 ;(macroexpand-1
 ;  '(protoc::compile-proto test2))
@@ -88,8 +109,6 @@
       (and count= buf=))))
 
 
-(protoc::eval-proto *test-form-1* (find-package :proto-test))
-(protoc::eval-proto *test-form-2* (find-package :proto-test))
 
 (defun test-1 (test-buffer type slot slot-value &key (test #'equalp))
   (let ((enc-inst (make-instance type))
@@ -136,44 +155,57 @@
                                       #16r9e #16ra7 #16r5))
 
         (buffer-x1 (binio:octet-vector 5 10 0 0 0
-                                       5 20 0 0 0)))
+                                       5 20 0 0 0))
+        (buffer-x2 (binio:octet-vector 0 10 ))
+        )
           
 
-  ;; Packing Testsk
+  ;; Packing Tests
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
 
-  (protoc::eval-proto *test-form-1* (find-package :proto-test))
-  (protoc::eval-proto *test-form-2* (find-package :proto-test))
-  (protoc::eval-proto *test-form-3* (find-package :proto-test))
-  (protoc::eval-proto *test-form-4* (find-package :proto-test))
-  (protoc::eval-proto *test-form-x1* (find-package :proto-test))
+  ;(protoc::eval-proto *test-form-1* (find-package :proto-test))
+  ;(protoc::eval-proto *test-form-2* (find-package :proto-test))
+  ;(protoc::eval-proto *test-form-3* (find-package :proto-test))
+  ;(protoc::eval-proto *test-form-4* (find-package :proto-test))
+  ;(protoc::eval-proto *test-form-x1* (find-package :proto-test))
 
-  ;; test 1 - varint
-  (test-1 buffer-1 'test1 'a 150)
-  ;; test 2 - string
-  (test-1 buffer-2 'test2 'b "testing")
-  ;; test 3 - embedded message
-  (let ((value (make-instance 'test1)))
-    (setf (slot-value value 'a) 150)
-    (test-1 buffer-3 'test3 'c value 
-            :test (lambda (a b)
-                    (= (slot-value a 'a)
-                       (slot-value b 'a)))))
+    (re-def)
 
-  ;; test 4 - repeated packed varint
-  (test-1 buffer-4 'test4 'd 
-          (make-array 3 
-                      :element-type '(signed-byte 32)
-                      :initial-contents '(3 270 86942)))
+    ;; test 1 - varint
+    (test-1 buffer-1 'test1 'a 150)
+    ;; test 2 - string
+    (test-1 buffer-2 'test2 'b "testing")
+    ;; test 3 - embedded message
+    (let ((value (make-instance 'test1)))
+      (setf (slot-value value 'a) 150)
+      (test-1 buffer-3 'test3 'c value 
+              :test (lambda (a b)
+                      (= (slot-value a 'a)
+                         (slot-value b 'a)))))
+    
+    ;; test 4 - repeated packed varint
+    (test-1 buffer-4 'test4 'd 
+            (make-array 3 
+                        :element-type '(signed-byte 32)
+                        :initial-contents '(3 270 86942)))
+    
+    ;; Test x1 - repeated unpacked fixed32
+    (let ((msg (make-instance 'proto-test::testx1)))
+      (vector-push-extend 10 (slot-value msg 'proto-test::a))
+      (vector-push-extend 20 (slot-value msg 'proto-test::a))
+      (test-1 buffer-x1 'testx1 'a (vector 10 20)
+              :test (lambda (a b) (and (= (length a) (length b))
+                                       (= (aref a 0) (aref b 0))
+                                       (= (aref a 1) (aref b 1))))))
+    
+  ;(let ((msg (make-instance 'testx2)))
+   ; (setf (slot-value msg 'a) :a)
+    (test-1 buffer-x2 'testx2 'a :b)
 
-  ;; Test x1 - repeated unpacked fixed32
-  (let ((msg (make-instance 'proto-test::testx1)))
-    (vector-push-extend 10 (slot-value msg 'proto-test::a))
-    (vector-push-extend 20 (slot-value msg 'proto-test::a))
-    (test-1 buffer-x1 'testx1 'a (vector 10 20)
-            :test (lambda (a b) (and (= (length a) (length b))
-                                     (= (aref a 0) (aref b 0))
-                                     (= (aref a 1) (aref b 1))))))
+    t))
 
-  t))
 
+
+  (let ((msg (make-instance 'testx2)))
+    (setf (slot-value msg 'a) :a)
+    (pb::packed-size msg))

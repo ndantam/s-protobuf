@@ -36,6 +36,8 @@
   (:export
    :pack
    :unpack
+   :enum-symbol
+   :enum-code
    :protocol-buffer))
 
 (in-package :protocol-buffer)
@@ -43,8 +45,10 @@
 ;; generic function acessors
 (defgeneric pack (protobuf &optional buf start))
 (defgeneric packed-size (protobuf))
-
 (defgeneric unpack (buffer protobuf &optional start end))
+
+(defgeneric enum-symbol (enum-name enum-code))
+(defgeneric enum-code (enum-name enum-symbol))
 
 
 (defparameter +types+ '(:double :float
@@ -63,7 +67,9 @@
 
 
 (defun primitive-type-p (type)
-  (find type +types+ :test #'eq))
+  (or
+   (find type +types+ :test #'eq)
+   (protoc::enum-type-p type)))
 
 (defun fixed64-p (type)
   (case type
@@ -84,7 +90,11 @@
   (case type
     ((:bool :int32 :sint32 :uint32 :int64 :sint64 :enum :int32 :uint64)
      t)
-    (otherwise nil)))
+    (otherwise nil )))
+
+(defun varint-enum-p (type)
+  (or (varint-p type)
+      (protoc::enum-type-p type)))
 
 (defun svarint-p (type)
   (case type
@@ -95,7 +105,7 @@
   (and (varint-p type) (not (svarint-p type))))
 
 (defun integer-type-p (type)
-  (or (varint-p type) (fixed-p type)))
+  (or (varint-enum-p type) (fixed-p type)))
 
 (defun length-delim-p (type)
   (and (not (fixed64-p type))
@@ -110,7 +120,7 @@
 (defun wire-typecode (type &optional repeated packed)
   (if (and repeated packed) 2
       (cond 
-        ((varint-p type) 0)
+        ((varint-enum-p type) 0)
         ((fixed64-p type) 1)
         ((fixed32-p type) 5)
         ((length-delim-p type) 2)
@@ -136,7 +146,7 @@
   (encode-uvarint (make-start-code slot-position typecode)
                  buffer start))
 
-(defun pack-length-delim (protobuf buffer start)
+(defun pack-embedded (protobuf buffer start)
   (let* ((size (packed-size protobuf))
          (size-size (binio:encode-uvarint size buffer start))
          (encoded-size (pack protobuf buffer (+ start size-size))))
@@ -151,6 +161,10 @@
 (defun packed-svarint-size (array)
   (loop for x across array 
      summing (binio::svarint-size x)))
+
+(defun packed-enum-size (coder array)
+  (loop for x across array 
+     summing (binio::uvarint-size (funcall coder x))))
 
 (defun length-delim-size (length)
   (+ (binio::uvarint-size length) length))

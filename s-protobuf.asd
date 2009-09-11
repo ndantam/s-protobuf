@@ -41,8 +41,7 @@
 (asdf:defsystem s-protobuf
   ;; The version should get updated from the Makefile via sed
   :version "0.0.20090903"
-  :description "A process manager"
+  :description "Protocol Buffer compiler and runtime"
   :components ((:file "binio")
                (:file "proto" :depends-on ("binio"))
-               (:file "protoc" :depends-on ("proto" "binio")
-               )))
+               (:file "protoc" :depends-on ("proto" "binio"))))

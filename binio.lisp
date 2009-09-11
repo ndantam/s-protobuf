@@ -189,7 +189,7 @@
   (loop 
      for v = value then (ash v -7)
      for i from 0
-     until (zerop v)
+     until (and (zerop v) (> i 0))
      finally (return i)))
 
 (defun svarint-size (value)
@@ -204,7 +204,7 @@
      for v-next = (ash v -7)
      for j from 0
      for i = (+ start j)
-     until (or (zerop v) 
+     until (or (and (zerop v) (> j 0))
                ;; cut out negative handling.
                ;(and (< value 0) 
                     ;;(= j 10) ;; i guess we'll use google's arbitrary limit...
@@ -339,6 +339,11 @@
     (assert (test-uvarint 10))
     (assert (test-uvarint 100))
     (assert (test-uvarint 100000))
+    (assert (equalp (multiple-value-bind (a b)
+                        (encode-uvarint 0)
+                      (declare (ignore a))
+                      b)
+                    (octet-vector 0)))
     ;; signed varints
     (assert (test-svarint 10))
     (assert (test-svarint 100))
