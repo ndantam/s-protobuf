@@ -63,13 +63,11 @@
 (protoc::def-proto-msg testx1
   (field a :sfixed32 0 :repeated t :packed nil))
 
-(macroexpand-1 '
 
 (protoc::def-proto-msg testx2
   (enum e (:a 0) (:b 10) (:c 20))
   (field a testx2-e 0 :repeated nil :packed nil))
 
-)
 
 (defun re-def () 
   (protoc::def-proto-msg test1

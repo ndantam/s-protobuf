@@ -42,7 +42,7 @@
 
 (defpackage :protocol-buffer-descriptor
   (:nicknames :proto-desc)
-  (:use :cl :protoc :pb))
+  (:use :cl :protoc :pb :binio))
 
 (in-package :proto-desc)
 
@@ -162,28 +162,28 @@
 
 (def-proto-msg field-descriptor-proto
   (enum type 
-        (:type-double 1)
-        (:type-float 2)
-        (:type-int64 3)
-        (:type-uint64 4)
-        (:type-int32 5)
-        (:type-fixed64 6)
-        (:type-fixed32 7)
-        (:type-bool 8)
-        (:type-string 9)
-        (:type-group 10)
-        (:type-message 11)
-        (:type-bytes 12)
-        (:type-uint32 13)
-        (:type-enum 14)
-        (:type-sfixed32 15)
-        (:type-sfixex64 16)
-        (:type-sint32 17)
-        (:type-sint64 18))
+        (:double 1)
+        (:float 2)
+        (:int64 3)
+        (:uint64 4)
+        (:int32 5)
+        (:fixed64 6)
+        (:fixed32 7)
+        (:bool 8)
+        (:string 9)
+        (:group 10)
+        (:message 11)
+        (:bytes 12)
+        (:uint32 13)
+        (:enum 14)
+        (:sfixed32 15)
+        (:sfixex64 16)
+        (:sint32 17)
+        (:sint64 18))
   (enum label
         (:label-optional 1)
         (:label-required 2)
-        (:label-repeated))
+        (:label-repeated 3))
   (field name :string 1 :optional t)
   (field number :int32 3 :optional t)
   (field label field-descriptor-proto-label 4
@@ -222,3 +222,73 @@
 
 (def-proto-msg  file-descriptor-set
   (field file file-descriptor-proto 1 :repeated t))
+
+
+ 
+
+(defun format-vector (stream vector)
+  (loop for x across vector
+     do (format stream "~&~A" x)))
+
+
+;; FIXME: these print-object definitions are incomplete
+
+(defmethod print-object ((object file-descriptor-set) stream)
+  (format stream "~&// File Descriptor Set:")
+  (format-vector stream  (slot-value object 'file)))
+
+
+(defmethod print-object ((object file-descriptor-proto) stream)
+  (format stream "~&// BEGIN File Descriptor Proto: ")
+  (format stream "~&//     Name: ~A" (slot-value object 'name))
+  (format stream "~&//     Package: ~A" (slot-value object 'package))
+  (format stream "~&//   Messages:")
+  (format-vector stream (slot-value object 'message-type))
+  (format stream "~&// END File Descriptor Proto: ")
+)
+
+
+(defmethod print-object ((object descriptor-proto) stream)
+  (format stream "~&message ~A {"
+          (slot-value object 'name))
+  (format-vector stream (slot-value object 'field))
+  (format stream "~&}"))
+
+
+(defmethod print-object ((object field-descriptor-proto) stream)
+  (format stream "    ~A ~A ~A = ~A;"
+          (or (slot-value object 'type-name)
+              (string-downcase (subseq (symbol-name (slot-value object 'label))
+                                       6)))
+          (string-downcase (subseq (symbol-name (slot-value object 'type))
+                                   0))
+          (slot-value object 'name)
+          (slot-value object 'number)))
+                               
+
+(defgeneric sanitize (object))
+
+(defmethod sanitize ((object t))
+  object)
+
+(defmethod sanitize ((object file-descriptor-set))
+  (apply #'nconc (map 'list #'sanitize (slot-value object 'file))))
+
+(defmethod sanitize ((object file-descriptor-proto))
+  (map 'list #'sanitize (slot-value object 'message-type)))
+
+
+(defmethod sanitize ((object descriptor-proto))
+  `(message ,(slot-value object 'name)))
+
+(defmethod sanitize ((object field-descriptor-proto))
+  `('message ,(slot-value object 'type)
+             ,@(map 'list #'sanitize (slot-value object 'field)))
+  )
+
+(let ((set (pb:unpack (binio::read-file-octets "tests/test.protobin")
+           (make-instance 'file-descriptor-set))))
+  ;(princ set)
+  (princ (sanitize set))
+  nil)
+  

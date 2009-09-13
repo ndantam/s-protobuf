@@ -239,6 +239,23 @@
       (decode-uvarint buffer start)
   (values (varint-unzigzag uv) i)))
 
+(defun read-octets (stream1 &key limit)
+  "read up to limit bytes from stream or eof if limit is nil"
+  (loop  with v =  (make-array 0 
+                               :element-type '(unsigned-byte 8)
+                               :adjustable t :fill-pointer t)
+     for x = (read-byte stream1 nil nil)
+     for i from 0
+     until (or (null x) (and limit (>= i limit)))
+     do (vector-push-extend x v)
+     finally (return (values (make-array (length v) :element-type 'octet
+                                  :initial-contents v)
+                             i))))
+
+(defun read-file-octets (filespec &key limit)
+  (with-open-file (s filespec :element-type 'octet)
+    (read-octets s :limit limit)))
+
 ;; strings
 
 (defun encode-utf8 (string 
