@@ -1,4 +1,5 @@
 ;;; -*- Lisp -*-
+;; Copyright 2008, Google Inc. 
 ;; Copyright (c) 2009, Georgia Tech Research Corporation
 ;; All rights reserved.
 ;;
@@ -36,6 +37,14 @@
 ;;
 ;; This is a hand translation of google's descriptor.proto by Kenton
 ;; Varda in order to bootstrap our CL implementation.
+;;
+;; Technically, we could do some complicated bootstrapping procedure
+;; wherein we use the hand-translation to load the binary version of
+;; descriptor.proto and ultimately run coders derived from that, but
+;; it's probably easier for everyone if we just manually keep
+;; descriptor.lisp synchronized with descriptor.proto (and since
+;; Protocol Buffers are designed to be Forward/Backward compatible,
+;; everyone should turn out OK anyway...)
 ;;
 ;; Author: Neil T. Dantam
 
@@ -98,6 +107,7 @@
         (:string_piece 2))
   (field ctype field-options-ctype 1 
          :optional t)
+  (field packed :bool 2 :optional t)
   (field experimental-map-key :string 9
          :optional t)
   (field uninterpreted-option 
@@ -223,72 +233,3 @@
 (def-proto-msg  file-descriptor-set
   (field file file-descriptor-proto 1 :repeated t))
 
-
- 
-
-(defun format-vector (stream vector)
-  (loop for x across vector
-     do (format stream "~&~A" x)))
-
-
-;; FIXME: these print-object definitions are incomplete
-
-(defmethod print-object ((object file-descriptor-set) stream)
-  (format stream "~&// File Descriptor Set:")
-  (format-vector stream  (slot-value object 'file)))
-
-
-(defmethod print-object ((object file-descriptor-proto) stream)
-  (format stream "~&// BEGIN File Descriptor Proto: ")
-  (format stream "~&//     Name: ~A" (slot-value object 'name))
-  (format stream "~&//     Package: ~A" (slot-value object 'package))
-  (format stream "~&//   Messages:")
-  (format-vector stream (slot-value object 'message-type))
-  (format stream "~&// END File Descriptor Proto: ")
-)
-
-
-(defmethod print-object ((object descriptor-proto) stream)
-  (format stream "~&message ~A {"
-          (slot-value object 'name))
-  (format-vector stream (slot-value object 'field))
-  (format stream "~&}"))
-
-
-(defmethod print-object ((object field-descriptor-proto) stream)
-  (format stream "    ~A ~A ~A = ~A;"
-          (or (slot-value object 'type-name)
-              (string-downcase (subseq (symbol-name (slot-value object 'label))
-                                       6)))
-          (string-downcase (subseq (symbol-name (slot-value object 'type))
-                                   0))
-          (slot-value object 'name)
-          (slot-value object 'number)))
-                               
-
-(defgeneric sanitize (object))
-
-(defmethod sanitize ((object t))
-  object)
-
-(defmethod sanitize ((object file-descriptor-set))
-  (apply #'nconc (map 'list #'sanitize (slot-value object 'file))))
-
-(defmethod sanitize ((object file-descriptor-proto))
-  (map 'list #'sanitize (slot-value object 'message-type)))
-
-
-(defmethod sanitize ((object descriptor-proto))
-  `(message ,(slot-value object 'name)))
-
-(defmethod sanitize ((object field-descriptor-proto))
-  `('message ,(slot-value object 'type)
-             ,@(map 'list #'sanitize (slot-value object 'field)))
-  )
-
-(let ((set (pb:unpack (binio::read-file-octets "tests/test.protobin")
-           (make-instance 'file-descriptor-set))))
-  ;(princ set)
-  (princ (sanitize set))
-  nil)
-  

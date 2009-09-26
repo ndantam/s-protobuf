@@ -51,13 +51,13 @@
 (defgeneric enum-code (enum-name enum-symbol))
 
 
-(defparameter +types+ '(:double :float
-                        :int32 :int64
-                        :uint32 :uint64
-                        :sint32 :sint64
-                        :fixed32 :fixed64
-                        :sfixed32 :sfixed64
-                        :bool :string :bytes))
+;;(defparameter +types+ '(:double :float
+;;                        :int32 :int64
+;;                        :uint32 :uint64
+;;                        :sint32 :sint64
+;;                        :fixed32 :fixed64
+;;                        :sfixed32 :sfixed64
+;;                        :bool :string :bytes))
 
 ;; encoders return (values bytes-encoded buffer)
 ;; decoders return (values value bytes-decoded)
@@ -66,68 +66,68 @@
 (deftype start-code () '(integer 0 5))
 
 
-(defun enum-type-p (sym)
-  (get sym 'protoc::enum))
+;;(defun enum-type-p (sym)
+  ;;(get sym 'protoc::enum))
 
-(defun primitive-type-p (type)
-  (or
-   (find type +types+ :test #'eq)
-   (enum-type-p type)))
+;;(defun primitive-type-p (type)
+  ;;(or
+   ;;(find type +types+ :test #'eq)
+   ;;(enum-type-p type)))
 
-(defun fixed64-p (type)
-  (case type
-    ((:double :fixed64 :sfixed64) t)
-    (otherwise nil)))
+;;(defun fixed64-p (type)
+;;  (case type
+;;    ((:double :fixed64 :sfixed64) t)
+;;    (otherwise nil)))
 
-(defun fixed32-p (type)
-  (case type
-    ((:float :sfixed32 :fixed32) t)
-    (otherwise nil)))
+;;(defun fixed32-p (type)
+;;  (case type
+;;    ((:float :sfixed32 :fixed32) t)
+;;    (otherwise nil)))
 
 
-(defun fixed-p (type)
-  (or (fixed32-p type)
-      (fixed64-p type)))
+;;(defun fixed-p (type)
+;;  (or (fixed32-p type)
+;;      (fixed64-p type)))
 
-(defun varint-p (type)
-  (case type
-    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :enum :int32 :uint64)
-     t)
-    (otherwise nil )))
+;;(defun varint-p (type)
+;;  (case type
+;;    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :enum :int32 :uint64)
+;;     t)
+;;    (otherwise nil )))
 
-(defun varint-enum-p (type)
-  (or (varint-p type)
-      (enum-type-p type)))
+;;(defun varint-enum-p (type)
+;;  (or (varint-p type)
+;;      (enum-type-p type)))
 
-(defun svarint-p (type)
-  (case type
-    ((:sint32 :sint64) t)
-    (otherwise nil)))
+;;(defun svarint-p (type)
+;;  (case type
+;;    ((:sint32 :sint64) t)
+;;    (otherwise nil)))
 
-(defun uvarint-p (type)
-  (and (varint-p type) (not (svarint-p type))))
+;;(defun uvarint-p (type)
+;;  (and (varint-p type) (not (svarint-p type))))
 
-(defun integer-type-p (type)
-  (or (varint-enum-p type) (fixed-p type)))
+;;(defun integer-type-p (type)
+;;  (or (varint-enum-p type) (fixed-p type)))
 
-(defun length-delim-p (type)
-  (and (not (fixed64-p type))
-       (not (fixed32-p type))
-       (not (varint-p type))))
+;;(defun length-delim-p (type)
+;;  (and (not (fixed64-p type))
+;;       (not (fixed32-p type))
+;;       (not (varint-p type))))
 
-(defun fixed-size (type)
-  (cond ((fixed32-p type) 4)
-        ((fixed64-p type) 8)
-        (t (error "Not a fixed type: ~A" type))))
+;;(defun fixed-size (type)
+;;  (cond ((fixed32-p type) 4)
+;;        ((fixed64-p type) 8)
+;;        (t (error "Not a fixed type: ~A" type))))
 
-(defun wire-typecode (type &optional repeated packed)
-  (if (and repeated packed) 2
-      (cond 
-        ((varint-enum-p type) 0)
-        ((fixed64-p type) 1)
-        ((fixed32-p type) 5)
-        ((length-delim-p type) 2)
-        (t 2))))
+;;(defun wire-typecode (type &optional repeated packed)
+;;  (if (and repeated packed) 2
+;;      (cond 
+;;        ((varint-enum-p type) 0)
+;;        ((fixed64-p type) 1)
+;;        ((fixed32-p type) 5)
+;;        ((length-delim-p type) 2)
+;;        (t 2))))
 
 ;; runtime support functions
 
@@ -262,12 +262,12 @@ returns (values length length-of-length)"
               (vector-push-extend value array)))))))
                      
 
-(defun proto-test ()
-  (labels ((test-start-code (type pos result)
-             (let ((buffer (make-octet-vector 1)))
-               (encode-start-code pos (wire-typecode type) buffer 0)
-               (equalp buffer (octet-vector result)))))
-    ;; from the google docs
-    (assert (test-start-code :int32 1 #16r08))
-    (assert (test-start-code :string 2 #16r12))
-    t))
+;;(defun proto-test ()
+;;  (labels ((test-start-code (type pos result)
+;;             (let ((buffer (make-octet-vector 1)))
+;;               (encode-start-code pos (wire-typecode type) buffer 0)
+;;               (equalp buffer (octet-vector result)))))
+;;    ;; from the google docs
+;;    (assert (test-start-code :int32 1 #16r08))
+;;    (assert (test-start-code :string 2 #16r12))
+;;    t))

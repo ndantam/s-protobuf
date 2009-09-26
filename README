@@ -2,8 +2,11 @@ This packagage, s-protobuf, provides a Common Lisp implemenation for
 the Protocol Buffers data encoding format, created by Google.
 
 
-* Implementation Notes    *
+* Implementation Notes *
 
+- We don't parse .proto files or use protoc to generate lisp code
+  (leave C++ to the masochists), but rather read in the
+  protobuf-encoded FileDescriptorSet output of protoc and compile that
 - The varint handling code supports arbitrary precision.
 - We don't track unknown fields
 
@@ -12,6 +15,23 @@ the Protocol Buffers data encoding format, created by Google.
 
 - description of encoding format in doc.txt
 
+
+* Incompatibilities *
+
+- varints are strictly unsigned (svarints are signed).  Cutting things
+  off at 10 bytes and making it negative is a kludge.  Kenton Varda
+  seems to sort of agree:
+  http://groups.google.com/group/protobuf/browse_thread/thread/0e03be7780f95616
+
+
 * Missing Features *
 
-- Lots...
+- Skipping Unknown Fields
+- Default Values
+- Packages
+- Trackng Unknown Fields
+- Support for (#-sbcl) -- only problem area is floating-point coding
+- Extensions
+- Services
+- Packed length-delimited fields (Google may not support it, but we
+  could)

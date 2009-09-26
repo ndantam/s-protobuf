@@ -206,11 +206,11 @@
 
 
 
-(let ((msg (make-instance 'testx2))
-      (msg-u (make-instance 'testx2)))
-  (setf (slot-value msg 'a) :b)
-  (multiple-value-bind (len buf)
-      (pb::pack msg)
-    ;(values len buf)))
-    (pb::unpack buf msg-u)))
+;;(let ((msg (make-instance 'testx2))
+      ;;(msg-u (make-instance 'testx2)))
+  ;;(setf (slot-value msg 'a) :b)
+  ;;(multiple-value-bind (len buf)
+      ;;(pb::pack msg)
+    ;;;(values len buf)))
+    ;;(pb::unpack buf msg-u)))
 

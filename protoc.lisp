@@ -56,8 +56,82 @@
             ((symbolp package-or-sym) (symbol-package package-or-sym))
             (t (error "Can't find package for ~A" package-or-sym)))))
 
+
+
+(defparameter +types+ '(:double :float
+                        :int32 :int64
+                        :uint32 :uint64
+                        :sint32 :sint64
+                        :fixed32 :fixed64
+                        :sfixed32 :sfixed64
+                        :bool :string :bytes))
+
 (defun enum-type-p (sym)
   (get sym 'enum))
+
+
+(defun primitive-type-p (type)
+  (or
+   (find type +types+ :test #'eq)
+   (enum-type-p type)))
+
+(defun fixed64-p (type)
+  (case type
+    ((:double :fixed64 :sfixed64) t)
+    (otherwise nil)))
+
+(defun fixed32-p (type)
+  (case type
+    ((:float :sfixed32 :fixed32) t)
+    (otherwise nil)))
+
+(defun fixed-p (type)
+  (or (fixed32-p type)
+      (fixed64-p type)))
+
+
+(defun varint-p (type)
+  (case type
+    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :enum :int32 :uint64)
+     t)
+    (otherwise nil )))
+
+(defun varint-enum-p (type)
+  (or (varint-p type)
+      (enum-type-p type)))
+
+(defun svarint-p (type)
+  (case type
+    ((:sint32 :sint64) t)
+    (otherwise nil)))
+
+(defun uvarint-p (type)
+  (and (varint-p type) (not (svarint-p type))))
+
+(defun integer-type-p (type)
+  (or (varint-enum-p type) (fixed-p type)))
+
+(defun length-delim-p (type)
+  (and (not (fixed64-p type))
+       (not (fixed32-p type))
+       (not (varint-p type))))
+
+(defun fixed-size (type)
+  (cond ((fixed32-p type) 4)
+        ((fixed64-p type) 8)
+        (t (error "Not a fixed type: ~A" type))))
+
+(defun wire-typecode (type &optional repeated packed)
+  (if (and repeated packed) 2
+      (cond 
+        ((varint-enum-p type) 0)
+        ((fixed64-p type) 1)
+        ((fixed32-p type) 5)
+        ((length-delim-p type) 2)
+        (t 2))))
+
+
+
 
 (defun lisp-type (ident &optional repeated)
   (let ((base (case ident
@@ -125,7 +199,7 @@
 
 
 (defun make-start-code-sym (slot-position type)
-  (pb::make-start-code slot-position (pb::wire-typecode type)))
+  (pb::make-start-code slot-position (wire-typecode type)))
 
 ;(defun slot-default-value (type repeated default)
   ;(cond
@@ -169,12 +243,12 @@
 (defun gen-scalar-size (type slot pos)
   `(+ ,(gen-start-code-size type pos)
       ,(cond 
-        ((pb::fixed64-p type) 8)
-        ((pb::fixed32-p type) 4)
+        ((fixed64-p type) 8)
+        ((fixed32-p type) 4)
         ((eq :bool type) 1)
-        ((pb::uvarint-p type)
+        ((uvarint-p type)
          `(binio::uvarint-size ,slot))
-        ((pb::svarint-p type) 
+        ((svarint-p type) 
          `(binio::svarint-size ,slot))
         ((enum-type-p type) 
          `(binio::uvarint-size (,(symcat type 'code) ,slot)))
@@ -186,10 +260,10 @@
 
 (defun gen-repeated-size (type slot pos)
   (cond 
-    ((pb::fixed-p type) 
+    ((fixed-p type) 
      `(* (length ,slot)
          (+ ,(gen-start-code-size type pos) 
-            ,(pb::fixed-size type))))
+            ,(fixed-size type))))
     (t 
      (let ((i (gensym))
            (accum (gensym)))
@@ -205,12 +279,12 @@
 (defun gen-packed-size (type slot &optional pos)
   (let ((array-size 
          (cond 
-           ((pb::fixed64-p type) `(* 8 (length ,slot)))
-           ((pb::fixed32-p type) `(* 4 (length ,slot)))
+           ((fixed64-p type) `(* 8 (length ,slot)))
+           ((fixed32-p type) `(* 4 (length ,slot)))
            ((eq :bool type) `(length ,slot))
-           ((pb::uvarint-p type) 
+           ((uvarint-p type) 
             `(pb::packed-uvarint-size ,slot))
-           ((pb::svarint-p type) 
+           ((svarint-p type) 
             `(pb::packed-uvarint-size ,slot))
            ((enum-type-p type) 
             `(pb::packed-enum-size #',(symcat type 'code) ,slot))
@@ -261,7 +335,7 @@
        `( ;; write start code
          (incf ,startsym 
                (pb::encode-start-code ,pos 
-                                      ,(pb::wire-typecode type)
+                                      ,(wire-typecode type)
                                       ,bufsym ,startsym))
 
          ;; write data code
@@ -273,7 +347,7 @@
              ;; write start code
              (incf ,startsym 
                    (pb::encode-start-code ,pos 
-                                          ,(pb::wire-typecode type)
+                                          ,(wire-typecode type)
                                           ,bufsym ,startsym))
              ;; write element
              ,(gen-pack1 bufsym startsym  `(aref ,slot ,countsym) type)))))
@@ -282,7 +356,7 @@
        `( ;; write start code
          (incf ,startsym 
                (pb::encode-start-code ,pos 
-                                      ,(pb::wire-typecode :bytes)
+                                      ,(wire-typecode :bytes)
                                       ,bufsym ,startsym))
          ;; write length
          ,(gen-pack1 bufsym startsym 
@@ -352,7 +426,7 @@
 (defun gen-unpack1 (bufsym startsym type placesym)
       `(pb::with-decoding (value length)
            ,(cond 
-             ((pb::primitive-type-p type)
+             ((primitive-type-p type)
               `(,(get-decoder-name type)
                  ,bufsym ,startsym))
              (t `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym)))
@@ -372,8 +446,8 @@
                                                           #',(get-decoder-name type)
                                                           buffer
                                                           :fixed-bit-size 
-                                                          ,(when (pb::fixed-p type)
-                                                                 (* 8 (pb::fixed-size 
+                                                          ,(when (fixed-p type)
+                                                                 (* 8 (fixed-size 
                                                                        type)))
                                                           :start start
                                                           :end end)))
@@ -381,7 +455,7 @@
            (incf ,startsym length))))
       ((and repeated (not packed))
        `((vector-push-extend ,(gen-unpack1 bufsym startsym type
-                                           (if (pb::primitive-type-p type) nil
+                                           (if (primitive-type-p type) nil
                                                `(make-instance ',type)))
                              ,slot)))
       (t (error "can't handle this type")))))
@@ -411,7 +485,7 @@
                               field-spec
                             (declare (ignore field default required optional))
                             `((,position 
-                               (assert (= typecode ,(pb::wire-typecode type
+                               (assert (= typecode ,(wire-typecode type
                                                                        repeated packed)))
                                ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
                                )))))
@@ -422,7 +496,7 @@
 (defun gen-init-form (type repeated packed)
   (cond 
     ((and (not repeated) (not packed))
-     (cond ((pb::integer-type-p type)  0)
+     (cond ((integer-type-p type)  0)
            ((eq type :string) nil)
            ((eq type :bool) nil)
            ((eq type :double) 0d0)
