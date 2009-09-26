@@ -75,36 +75,69 @@
           (slot-value object 'number)))
                                
 
+(defun unmangle (str)
+  (with-output-to-string (s)
+    (loop for i from 0 below (length str)
+         do
+         (cond 
+           ((eq (aref str i) #\_)
+            (write-char #\- s))
+           (t (write-char (char-upcase (aref str i)) s))))))
 
-(defgeneric sanitize (object &optional parent)
+(defun unmangle-slot (object slot)
+  (unmangle (slot-value object slot)))
+
+
+(defun sanitize-package (file-proto)
+  (if (slot-value file-proto 'package)
+      (find-package (intern (unmangle-slot file-proto 'package)
+                            :keyword))
+      (find-package :cl-user)))
+
+(defun sanitize-name (name package)
+  (intern (unmangle name) package))
+
+(defun sanitize-name-slot (object slot package)
+  (sanitize-name (slot-value object slot) package))
+
+(defgeneric sanitize (object &key parent package)
   (:documentation 
   "Convert the structure based protocol buffer representation
   obtainened by parsing the binary output of protoc into
   S-Expressions"))
 
-(defun sanitizer (&optional parent)
-  (lambda (object) (sanitize object parent)))
+(defun sanitizer (parent package)
+  (lambda (object) (sanitize object :parent parent :package package)))
 
-(defmethod sanitize ((object t) &optional parent)
-  (declare (ignore parent))
+(defmethod sanitize ((object t) &key parent package)
+  (declare (ignore parent package))
   object)
 
-(defmethod sanitize ((object file-descriptor-set) &optional parent)
-  (declare (ignore parent))
+;; multi-file container
+(defmethod sanitize ((object file-descriptor-set) &key parent package)
+  (declare (ignore parent package))
   (apply #'nconc (map 'list #'sanitize (slot-value object 'file))))
 
-(defmethod sanitize ((object file-descriptor-proto) &optional parent)
-  (declare (ignore parent))
-  (map 'list #'sanitize (slot-value object 'message-type)))
+;; single-file container 
+(defmethod sanitize ((object file-descriptor-proto) &key parent package)
+  (declare (ignore parent package))
+  (nconc 
+   (map 'list (sanitizer object (sanitize-package object))
+        (slot-value object 'enum-type))
+   (map 'list (sanitizer object (sanitize-package object) )
+        (slot-value object 'message-type))))
 
-(defmethod sanitize ((object descriptor-proto) &optional parent)
-  (declare (ignore parent))
-  `(message ,(slot-value object 'name)
-            ,@(map 'list (sanitizer object) (slot-value object 'field))))
 
-(defmethod sanitize ((object field-descriptor-proto) &optional parent)
+;; a message
+(defmethod sanitize ((object descriptor-proto) &key parent package)
   (declare (ignore parent))
-  `(field ,(slot-value object 'name) 
+  `(message ,(sanitize-name-slot object 'name package)
+            ,@(map 'list (sanitizer object package) (slot-value object 'field))))
+
+;; a message field
+(defmethod sanitize ((object field-descriptor-proto) &key parent package)
+  (declare (ignore parent))
+  `(field ,(sanitize-name-slot object 'name package)
           ,(slot-value object 'type)
           ,(slot-value object 'number)
           ,@(if (eq (slot-value object 'label) :label-optional)
@@ -114,10 +147,22 @@
           ,@(if (eq (slot-value object 'label) :label-required)
                 '(:required t))))
 
+;; enum
+(defmethod sanitize ((object enum-descriptor-proto) &key parent package)
+  (declare (ignore parent))
+  `(enum ,(sanitize-name-slot object 'name package) 
+         ,@(map 'list (sanitizer object package) 
+                (slot-value object 'value))))
+;; enum value
+(defmethod sanitize ((object enum-value-descriptor-proto) &key parent package)
+  (declare (ignore parent package))
+  (list (sanitize-name-slot object 'name (find-package :keyword))
+        (slot-value object 'number)))
 
 
 
-(let ((set (pb:unpack (binio::read-file-octets "tests/test.protobin")
+(let ((set (pb:unpack (binio::read-file-octets 
+                       "/home/ntd/src/s-protobuf/tests/test.protobin")
            (make-instance 'file-descriptor-set))))
   ;(princ set)
   (prin1 (sanitize set))

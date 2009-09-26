@@ -220,6 +220,7 @@
          :repeated t)
   (field options message-options 7 :optional t))
 
+;; file container
 (def-proto-msg file-descriptor-proto
   (field name :string 1 :optional t)
   (field package :string 2 :optional t)
@@ -230,6 +231,7 @@
   (field extension field-descriptor-proto 7 :repeated t)
   (field options file-options 8 :repeated t))
 
+;; multi file container
 (def-proto-msg  file-descriptor-set
   (field file file-descriptor-proto 1 :repeated t))
 

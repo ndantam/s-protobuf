@@ -1,0 +1,15 @@
+package proto_test;
+
+enum special_command {
+    NONE = 0;
+    RESET = 1;
+    EMERGENCY_STOP = 2;
+    APPLY_BRAKE = 3;
+    RELEASE_BRAKE = 4;
+}
+
+message SearchRequest {
+  required string query = 1;
+  repeated int32 page_number = 2;
+  optional int32 result_per_page = 3;
+      }
