@@ -41,8 +41,11 @@
     (:sect 1 "Introduction"
            (:sect 2 "Overview"
                   (para "This packagage, s-protobuf, provides a Common
-                    Lisp implemenation for the Protocol Buffers data
-                    encoding format, created by Google."))
+                    Lisp implemenation for the" ((ulink url
+                    "http://code.google.com/apis/protocolbuffers/docs/overview.html")
+                                                 "Protocol Buffers")
+                    "data encoding format,
+                    created by Google."))
 
            (:sect 2 "Getting S-PROTOBUF"
                   (programlisting 
@@ -50,7 +53,13 @@
                                  "git clone "
                                  "http://www.prism.gatech.edu/"
                                  "~ndantam3/git/s-protobuf.git")))
-
+           (:sect 2 "Authors"
+                  (para "S-PROTOBUF was written by Neil
+                  T. Dantam ({first,middle,last-initial}@gatech.edu).
+                  The original Protocol Buffers design was developed
+                  internally at Google by a number of people.  Current
+                  efforts seem to be led by Kenton
+                  Varda ({firstname}@google.com)."))
            (:bsd-license 2 "Legal" 
                          "2008" "Google Inc." 
                          "2009" "Georgia Tech Research Corporation"))
