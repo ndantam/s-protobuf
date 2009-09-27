@@ -129,8 +129,131 @@
                    "  (enum e (:a 0) (:b 10) (:c 20))"
                    "  (field a testx2-e 1 :repeated nil :packed nil))"
                   )
-                  (para "If you want some more details, you can try macroexpanding " (function load-proto-set) ".")))))
+                  (para "If you want some more details, you can try
+                  macroexpanding " (function load-proto-set) ".")))
+    (:sect 1 "Wire Format"
+           (:sect 2 "Varints"
+                  (para "Varints are a space-efficient encoding of
+                    integers.  Each octet contains the next 7
+                    little-endian bits of the integer in the low bits
+                    of the octet with the high bit of the octet set if
+                    another octet is required.  More formally, bits 0
+                    through 6 of the nth octet of the encoded data
+                    contains little-endian bits 7*n through 7*n+7 of
+                    the integer, and bit 7 of the nth octet is set if
+                    and only if there is a n+1'th octet.")
+
+                  (para "While this encoding scheme works well for
+                    unsigned integers to arbitrary precision, negative
+                    integers in two's complement would create an
+                    non-terminating sequence.  To resolve this
+                    problem, signed integers are mapped to unsigned
+                    integers using a zig-zag encoding.  This sequence
+                    follows the patter of 0->0, -1->1, 1->2, -2->3,
+                    2->4... This mapping can be expressed as:")
+                  (programlisting
+                   "zigzag(n) = 2*abs(n) - sign(n) * ( (sign(n) - 1) &gt;&gt; 1)"
+                   "unzigzag(z) = ( (n+(n&amp;1)) &gt;&gt;> 1 ) * ( 1 - 2*(n&amp;1))")
+                  )
+           (:sect 2 "Primitive Data Types"
+                  (para "All numeric types are encoded in
+                  little-endian byte order.")
+                  (variablelist
+                   (varlistentry 
+                    (term "double")
+                    (listitem (para "IEEE754 double precision floating
+                    point")))
+                   (varlistentry
+                    (term "float")
+                    (listitem (para "IEEE754 single precision floating
+                    point")))
+                   (varlistentry 
+                    (term "int32")
+                    (listitem (para "unsigned varint, maximum 32 bits
+                    decoded precision")))
+                   (varlistentry 
+                    (term "int64")
+                    (listitem (para "unsigned varint, maximum 64 bits
+                               decoded precision" )))
+                   (varlistentry 
+                    (term "uint32")
+                    (listitem (para "unsigned varint, maximum 32 bits
+                    decoded precision")))
+                   (varlistentry 
+                    (term "uint64")
+                    (listitem (para "unsigned varint, maximum 64 bits
+                    decoded precision")))
+                   (varlistentry
+                    (term "sint32")
+                    (listitem (para "signed varint, maximum 32 bits
+                    decoded precision")))
+                   (varlistentry
+                    (term "sint64")
+                    (listitem (para "signed varint, maximum 64 bits
+                    decoded precision")))
+                   (varlistentry
+                    (term "fixed32")
+                    (listitem (para "unsigned 32 bit integer, encoded
+                      as four little-endian bytes")))
+                   (varlistentry
+                    (term "fixed64")
+                    (listitem (para "unsigned 64 bit integer, encoded as eight little-endian
+                      byte")))
+                   (varlistentry
+                    (term "sfixed32")
+                    (listitem (para "signed 32 bit integer, encoded as four little-endian
+                     byte")))
+                   (varlistentry
+                    (term "sfixed64")
+                    (listitem (para "signed 64 bit integer, encoded as eight little-endian
+                      byte")))
+                   (varlistentry
+                    (term "bool")
+                    (listitem (para "varint-encoded 0 or 1")))
+                   (varlistentry
+                    (term "string")
+                    (listitem (para "A text-string encoded as a
+                      sequence of UTF8 bytes, prefixed with the number
+                      of bytes encoded as an unsigned varint")))
+                   (varlistentry
+                    (term "bytes")
+                    (listitem (para  "A raw sequence of bytes")))
+                   )
+                  )
+           (:sect 2 "Field Encoding"
+                  (para "Each field of a message is encoded as a tag
+                    followed by the encoded field data.  The tag is
+                    the varint encoding of an integer whose lower
+                    three bytes are a type code and whose upper bytes
+                    are the defined position of the field.  Note that
+                    to recover the position from the tag, the tag must
+                    be downshifted three bits.")
+                  (para "The purpose of the typecode is to indicate
+                   the size of the field so that conforming
+                   applications who have a message definition that is
+                   unaware of that field can skip over it and recover
+                   the remainder of the message.  Conforming
+                   implementations are required to skip over unknown
+                   fields in this manner.")
+
+                  (para "The following type codes are currently defined:")
+                  (itemizedlist
+
+                   (listitem (para "0: a varint"))
+                   (listitem (para "1: fixed size, 64 bit"))
+                   (listitem (para "5: fixed size, 32 bit"))
+                   (listitem (para "2: a unsigned varint encoded
+                             length followed by that many bytes"))
+                   ))
+           (:sect 2 "Message Encoding"
+                  (para "A message is encoded as the simple
+                     concatenation of its encoded fields.  There is no
+                     defined whole-message type code, delimiter, or
+                     size indicator; implementations should handle
+                     these needs via some external mechanism."))
+    )))
            
+
 
 (defun expand-inline ()
   (s-expand t *doc* :transform-alist *docbook-transform-alist*))
