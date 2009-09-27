@@ -33,12 +33,18 @@
 
 ;; Author: Neil T. Dantam
 
-(in-package :proto-desc)
+;;(in-package :proto-desc)
+(in-package :protoc)
 
 (defun format-vector (stream vector)
   (loop for x across vector
      do (format stream "~&~A" x)))
 
+
+(defun slot-bound-value (object slot &optional default-value)
+  (if (slot-boundp object slot)
+      (slot-value object slot)
+      default-value))
 
 ;; FIXME: these print-object definitions are incomplete
 
@@ -49,53 +55,73 @@
 
 (defmethod print-object ((object file-descriptor-proto) stream)
   (format stream "~&// BEGIN File Descriptor Proto: ")
-  (format stream "~&//     Name: ~A" (slot-value object 'name))
-  (format stream "~&//     Package: ~A" (slot-value object 'package))
-  (format stream "~&//   Messages:")
-  (format-vector stream (slot-value object 'message-type))
+  (when (slot-boundp  object 'name)
+    (format stream "~&//     Name: ~A" (slot-value object 'name)))
+  (when (slot-boundp  object 'package)
+    (format stream "~&//     Package: ~A" (slot-value object 'package)))
+  (when (slot-boundp object 'message-type)
+    (format stream "~&//   Messages:")
+    (format-vector stream (slot-value object 'message-type)))
   (format stream "~&// END File Descriptor Proto: ")
 )
 
 
+
 (defmethod print-object ((object descriptor-proto) stream)
   (format stream "~&message ~A {"
-          (slot-value object 'name))
-  (format-vector stream (slot-value object 'field))
+          (slot-bound-value object 'name))
+  (format-vector stream (slot-bound-value object 'field))
   (format stream "~&}"))
 
 
 (defmethod print-object ((object field-descriptor-proto) stream)
-  (format stream "    ~A ~A ~A = ~A;"
-          (or (slot-value object 'type-name)
-              (string-downcase (subseq (symbol-name (slot-value object 'label))
+  (format stream "    ~A ~A ~A = ~A"
+          (or (slot-bound-value object 'type-name)
+              (string-downcase (subseq (symbol-name (slot-bound-value object 'label))
                                        6)))
-          (string-downcase (subseq (symbol-name (slot-value object 'type))
+          (string-downcase (subseq (symbol-name (slot-bound-value object 'type))
                                    0))
           (slot-value object 'name)
-          (slot-value object 'number)))
+          (slot-value object 'number))
+  (when (slot-boundp object 'options)
+    (prin1 (slot-value object 'options) stream))
+  (write-string ";" stream))
                                
+
+(defmethod print-object ((object field-options) stream)
+  (when (slot-boundp object 'packed)
+    (format stream "[packed=~A]" (slot-value object 'packed))))
 
 (defun unmangle (str)
   (with-output-to-string (s)
     (loop for i from 0 below (length str)
          do
          (cond 
-           ((eq (aref str i) #\_)
+           ((or (eq (aref str i) #\_)
+                (eq (aref str i) #\.))
             (write-char #\- s))
            (t (write-char (char-upcase (aref str i)) s))))))
 
 (defun unmangle-slot (object slot)
   (unmangle (slot-value object slot)))
 
+(defun lookup-package-name (name)
+  (or (find-package (intern name :keyword))
+      :cl-user))
 
 (defun sanitize-package (file-proto)
   (if (slot-value file-proto 'package)
-      (find-package (intern (unmangle-slot file-proto 'package)
-                            :keyword))
+      (lookup-package-name  (unmangle-slot file-proto 'package))
       (find-package :cl-user)))
 
 (defun sanitize-name (name package)
-  (intern (unmangle name) package))
+  (let ((name name) (package package))
+    (when (eq (aref name 0) #\.)
+      (setq package 
+            (lookup-package-name 
+             (unmangle (subseq name 1 (position #\. name :start 1)))))
+      (setq name (subseq name (1+ (position #\. name :start 1)))))
+    (intern (unmangle name) package)))
 
 (defun sanitize-name-slot (object slot package)
   (sanitize-name (slot-value object slot) package))
@@ -121,38 +147,60 @@
 ;; single-file container 
 (defmethod sanitize ((object file-descriptor-proto) &key parent package)
   (declare (ignore parent package))
-  (nconc 
-   (map 'list (sanitizer object (sanitize-package object))
-        (slot-value object 'enum-type))
-   (map 'list (sanitizer object (sanitize-package object) )
-        (slot-value object 'message-type))))
+  (let ((sanitizer (sanitizer object (sanitize-package object))))
+    (nconc 
+     (map 'list sanitizer
+          (slot-bound-value object 'enum-type))
+     (apply #'nconc 
+            (map 'list sanitizer 
+                 (slot-value object 'message-type))))))
 
 
 ;; a message
 (defmethod sanitize ((object descriptor-proto) &key parent package)
   (declare (ignore parent))
-  `(message ,(sanitize-name-slot object 'name package)
-            ,@(map 'list (sanitizer object package) (slot-value object 'field))))
+  `(,@(map 'list (sanitizer object package) 
+           (slot-bound-value object 'enum-type))
+    (message ,(sanitize-name-slot object 'name package)
+            ,@(map 'list (sanitizer object package) (slot-value object 'field)))))
+
+(defun sanitize-type (field-desc package)
+  (let ((base-type (slot-value field-desc 'type)))
+    (case base-type
+      ((:enum :message) (sanitize-name-slot field-desc 'type-name package))
+      (otherwise base-type))))
 
 ;; a message field
 (defmethod sanitize ((object field-descriptor-proto) &key parent package)
   (declare (ignore parent))
   `(field ,(sanitize-name-slot object 'name package)
-          ,(slot-value object 'type)
+          ,(sanitize-type object package)
           ,(slot-value object 'number)
           ,@(if (eq (slot-value object 'label) :label-optional)
                 '(:optional t))
           ,@(if (eq (slot-value object 'label) :label-repeated)
                 '(:repeated t))
           ,@(if (eq (slot-value object 'label) :label-required)
-                '(:required t))))
+                '(:required t))
+          ,@(if (and (slot-boundp object 'options)
+                     (let ((options (slot-value object 'options)))
+                       (and 
+                        (slot-boundp options 'packed)
+                        (slot-value options 'packed))))
+                '(:packed t))))
 
 ;; enum
 (defmethod sanitize ((object enum-descriptor-proto) &key parent package)
-  (declare (ignore parent))
-  `(enum ,(sanitize-name-slot object 'name package) 
+  (let ((name (if (eq (type-of parent) 'descriptor-proto)
+                  (concatenate 'string
+                               (slot-value parent 'name) "-"
+                               (slot-value object 'name))
+                  (slot-value object 'name))))
+      ;(format t "~&~S~&"  (type-of parent))
+      ;(format t "~&No~&"))
+  `(enum ,(sanitize-name name package)
          ,@(map 'list (sanitizer object package) 
-                (slot-value object 'value))))
+                (slot-value object 'value)))))
 ;; enum value
 (defmethod sanitize ((object enum-value-descriptor-proto) &key parent package)
   (declare (ignore parent package))
@@ -160,11 +208,34 @@
         (slot-value object 'number)))
 
 
+(defun load-proto-structs (filespec)
+  (pb:unpack 
+   (binio::read-file-octets filespec)
+   (make-instance 'file-descriptor-set)))
 
-(let ((set (pb:unpack (binio::read-file-octets 
-                       "/home/ntd/src/s-protobuf/tests/test.protobin")
-           (make-instance 'file-descriptor-set))))
-  ;(princ set)
-  (prin1 (sanitize set))
-  nil)
-  
+(defun sanitize-file (filespec)
+  (let ((set (load-proto-structs filespec)))
+    (sanitize set)))
+
+
+(defun macroize-se (se)
+  (mapcan (lambda (a)
+            (cond 
+              ((protoc::symbol-string= (car a) 'message)
+               (protoc::gen-msg-defs (cadr a) (cddr a)))
+               ;(list (cons 'protoc::def-proto-msg (cdr a))))
+              ((protoc::symbol-string= (car a) 'enum)
+               (list (cons 'protoc::def-proto-enum (cdr a))))))
+          se))
+              
+
+(defmacro load-proto-set (filespec)
+  (cons 'progn 
+        (macroize-se (sanitize-file filespec))))
+
+
+
+(defmacro dump-proto-set (filespec)
+  (cons 'progn 
+        (macroize-se (sanitize-file filespec))))
+

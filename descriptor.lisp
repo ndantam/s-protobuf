@@ -49,11 +49,12 @@
 ;; Author: Neil T. Dantam
 
 
-(defpackage :protocol-buffer-descriptor
-  (:nicknames :proto-desc)
-  (:use :cl :protoc :pb :binio))
+;;(defpackage :protocol-buffer-descriptor
+  ;;(:nicknames :proto-desc)
+  ;;(:use :cl :protoc :pb :binio))
 
-(in-package :proto-desc)
+;;(in-package :proto-desc)
+(in-package :protoc)
 
 
 (def-proto-msg uninterpreted-option-name-part
@@ -210,6 +211,7 @@
   (field start :int32 1 :optional t)
   (field end :int32 2 :optional t))
 
+;; a message
 (def-proto-msg descriptor-proto
   (field name :string 1 :optional t)
   (field field field-descriptor-proto 2 :repeated t)
@@ -230,6 +232,7 @@
   (field service service-descriptor-proto 6 :repeated t)
   (field extension field-descriptor-proto 7 :repeated t)
   (field options file-options 8 :repeated t))
+
 
 ;; multi file container
 (def-proto-msg  file-descriptor-set

@@ -38,7 +38,7 @@
 
 (defpackage :protocol-buffer-compiler
   (:nicknames :protoc)
-  (:export :def-proto-msg)
+  (:export :def-proto-msg :def-proto-enum :load-proto-set)
   (:use :cl))
 
 (in-package :protocol-buffer-compiler)
@@ -269,7 +269,8 @@
            (accum (gensym)))
        `(let ((,accum 0))
           (dotimes (,i (length ,slot))
-            ,(gen-scalar-size type `(aref ,slot ,i) pos))
+            (incf ,accum 
+                  ,(gen-scalar-size type `(aref ,slot ,i) pos)))
           ,accum)))))
 
         ;((pb::svarint-p type) 
@@ -309,7 +310,7 @@
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package)))
-      `(defmethod pb::packed-size ((,protobuf ,(pb-sym name package)))
+      `(defmethod pb::packed-size ((,protobuf ,name))
          (+ ,@(mapcan (lambda (field-spec)
                         (when (symbol-string= (car field-spec) "FIELD")
                           (destructuring-bind (field name type position 
@@ -368,14 +369,14 @@
                               `(aref ,slot ,isym) type))))))))
          
 
-(defun msg-defpack (form package)
+(defun msg-defpack ( form package)
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package))
           (buffer (pb-sym 'buffer package))
           (start (pb-sym 'start package))
           (i (gensym)))
-      `(defmethod pb:pack ((,protobuf ,(pb-sym name package))
+      `(defmethod pb:pack ((,protobuf ,name)
                            &optional
                            (,buffer (binio::make-octet-vector 
                                      (pb::packed-size ,protobuf)))
@@ -437,7 +438,13 @@
   (let ((slot  `(slot-value ,objsym ',name)))
     (cond 
       ((and (not repeated) (not packed))
-       `((setf ,slot ,(gen-unpack1 bufsym startsym  type slot))))
+       `(
+         ;(format t "~&unpacking scalar")
+         ,@(unless (primitive-type-p type)
+                   `((unless (slot-boundp ,objsym ',name)
+                       ;(format t "~&making new slot")
+                       (setf ,slot (make-instance ',(lisp-type type))))))
+         (setf ,slot ,(gen-unpack1 bufsym startsym  type slot))))
       ((and repeated packed)
        `((pb::with-decoding (value length)
              (pb::decode-length-delim ,bufsym ,startsym 
@@ -454,17 +461,22 @@
            (setf ,slot value)
            (incf ,startsym length))))
       ((and repeated (not packed))
-       `((vector-push-extend ,(gen-unpack1 bufsym startsym type
+       `((unless (slot-boundp ,objsym ',name)
+           (setf ,slot 
+                 (make-array 0 :element-type ',(lisp-type type) 
+                             :fill-pointer t)))
+         (vector-push-extend ,(gen-unpack1 bufsym startsym type
                                            (if (primitive-type-p type) nil
                                                `(make-instance ',type)))
                              ,slot)))
       (t (error "can't handle this type")))))
 
 (defun def-unpack (form package)
+  (declare (ignore package))
   (destructuring-bind (message name &rest field-specs) form
     (declare (ignore message))
     `(defmethod pb::unpack (buffer
-                            (protobuf ,(pb-sym name package))
+                            (protobuf ,name)
                             &optional (start 0) (end (length buffer)))
        (declare (binio:octet-vector buffer))
        (do ((i start))
@@ -490,7 +502,8 @@
                                ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
                                )))))
                       field-specs)
-             (otherwise (error "Unhandled position, need to skip"))))))))
+             (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
+                               pos ',name buffer))))))))
 
 
 (defun gen-init-form (type repeated packed)
@@ -554,27 +567,27 @@
                         (cddr spec))))
           specs))
 
-(defun msg-defclass (form package)
-  (destructuring-bind (message name &rest field-specs) form
-    (assert (symbol-string= message 'message) () "Not a message form")
-    `((cl:defclass ,(pb-sym name package) () ())
-      (cl:defclass ,(pb-sym name package) ()
-       ;; slots
-       ,(mapcan (lambda (field-spec)
-                  (when (symbol-string= (car field-spec) "FIELD")
-                    (destructuring-bind (field field-name type position 
-                                               &key 
-                                               (default nil)
-                                               (required nil)
-                                               (repeated nil)
-                                               (packed nil)
-                                               (optional nil))
-                        field-spec
-                      (declare (ignore position field default required optional))
-                      `((,field-name 
-                         :type ,(lisp-type type repeated)
-                         :initform ,(gen-init-form type repeated packed))))))
-                field-specs)))))
+(defun msg-defclass (name field-specs)
+  `((cl:defclass ,name () ())
+    (cl:defclass ,name ()
+      ;; slots
+      ,(mapcan (lambda (field-spec)
+                 (when (symbol-string= (car field-spec) "FIELD")
+                   (destructuring-bind (field field-name type position 
+                                              &key 
+                                              (default nil)
+                                              (required nil)
+                                              (repeated nil)
+                                              (packed nil)
+                                              (optional nil))
+                       field-spec
+                     (declare (ignore position field packed
+                                      default required optional))
+                     `((,field-name 
+                        :type ,(lisp-type type repeated)
+                        ;:initform ,(gen-init-form type repeated packed)
+                        )))))
+               field-specs))))
 
 
 
@@ -585,7 +598,7 @@
        until (null form)
        do
          (format t "~S~%" form)
-         collect
+       collect
          (cond 
            ((symbol-string= (car form) "MESSAGE")
             (format t "Declareing: ~&~S~%" form)
@@ -593,31 +606,21 @@
            (t (error "Unknown form in proto file: ~A" (car form)))))))
 
 
-(defun eval-proto (form &optional (package *package*))
-  (eval 
-   `(progn
-      ,@(msg-defclass form package)
-      ,(def-packed-size form package)
-      ,(msg-defpack form package)
-      ,(def-unpack form package)
-      )))
-  
+(defun gen-msg-defs (name body)
+  (let ((form `(message ,name ,@body)))
+    `(
+       ,@(msg-def-enums name body) 
+       ,@(msg-defclass name body)
+       ,(def-packed-size form (symbol-package name))
+       ,(msg-defpack form (symbol-package name))
+       ,(def-unpack form (symbol-package name)))))
 
 (defmacro def-proto-msg (name &body body)
-  (let ((form `(message ,name ,@body)))
     `(progn
-       ,@(msg-def-enums name body) 
-       ,@(msg-defclass form *package*)
-       ,(def-packed-size form *package*)
-       ,(msg-defpack form *package*)
-       ,(def-unpack form *package*))))
+       ,@(gen-msg-defs name body)))
 
-(defmacro compile-proto (name &optional (package *package*))
-  (let ((form (get name 'message)))
-    `(progn
-       ,(msg-defclass form package)
-       ,(def-packed-size form package)
-       ,(msg-defpack form package)
-       ;,(def-unpack form package)
-       )))
-       
+
+(defmacro def-proto-enum (name &body values)
+  `(progn
+     ,@(gen-enum name values)))
+          

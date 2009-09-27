@@ -38,7 +38,7 @@
 
 (defpackage :protocol-buffer-test
   (:nicknames :proto-test)
-  (:use :cl))
+  (:use :cl :protoc))
 
 
 (in-package :proto-test)
@@ -58,44 +58,38 @@
   (field c test1 3))
 
 (protoc::def-proto-msg test4
-  (field d :int32 4 :repeated t :packed t))
+  (field d :int32 4 :repeated t :packed nil))
 
 (protoc::def-proto-msg testx1
-  (field a :sfixed32 0 :repeated t :packed nil))
+  (field a :sfixed32 1 :repeated t :packed nil))
 
 
 (protoc::def-proto-msg testx2
   (enum e (:a 0) (:b 10) (:c 20))
-  (field a testx2-e 0 :repeated nil :packed nil))
+  (field a testx2-e 1 :repeated nil :packed nil))
 
 
-(defun re-def () 
+(defun redef () 
   (protoc::def-proto-msg test1
     (field a :int32 1))
   
   (protoc::def-proto-msg test2
     (field b :string 2))
-  
+
   (protoc::def-proto-msg test3
     (field c test1 3))
   
   (protoc::def-proto-msg test4
-    (field d :int32 4 :repeated t :packed t))
+    (field d :int32 4 :repeated t :packed nil))
   
   (protoc::def-proto-msg testx1
-    (field a :sfixed32 0 :repeated t :packed nil))
+    (field a :sfixed32 1 :repeated t :packed nil))
+
   (protoc::def-proto-msg testx2
     (enum e (:a 0) (:b 10) (:c 20))
-    (field a testx2-e 0 :repeated nil :packed nil))
+    (field a testx2-e 1 :repeated nil :packed nil)) 
 )
 
-;(macroexpand-1
-;  '(protoc::compile-proto test2))
-
-;(protoc::def-packed-size *test-form-1* *package*)
-;(protoc::msg-defpack *test-form-1* *package*)
-
-;(protoc::msg-defpack *test-form-2* *package*)
 
 (defun oct->hex (array)
   (map 'vector (lambda (elt)
@@ -117,17 +111,20 @@
     ;; test encoding
     (multiple-value-bind (length buffer)
         (pb:pack enc-inst)
-      (assert (= length (length test-buffer) (length buffer)))
-      (assert (equalp buffer test-buffer)))
+      (assert (= length (length test-buffer) (length buffer))
+              () "Wrong encoded length")
+      (assert (equalp buffer test-buffer) 
+              () "Bad encoding: ~A" buffer ))
     ;; test decoding
     (multiple-value-bind (dec-inst* length)
         (pb:unpack test-buffer dec-inst)
-      (assert (= length (length test-buffer)))
-      (assert (eq dec-inst* dec-inst))
-      (assert (funcall test slot-value (slot-value dec-inst slot))))))
+      (assert (= length (length test-buffer)) () "Wrong decoded length")
+      (assert (eq dec-inst* dec-inst) () "Instance mismatch")
+      (assert (funcall test slot-value (slot-value dec-inst slot))
+              () "Bad decoding"))))
 
 (defun test ()
-  (format t "package ~A~%" *package*)
+  ;(format t "package ~A~%" *package*)
   ;; test binio
   (assert (binio::test))
 
@@ -149,27 +146,23 @@
         (buffer-3 (binio:octet-vector 
                    #16r1a #16r03
                    #16r08 #16r96 #16r01))
-        (buffer-4 (binio:octet-vector #16r22 #16r06
+        ;; typecode is #16r22 for packed
+        (buffer-4 (binio:octet-vector #16r20 ;#16r06
                                       #16r03 
-                                      #16r8e #16r02
-                                      #16r9e #16ra7 #16r5))
+                                      #16r20 #16r8e #16r02
+                                      #16r20 #16r9e #16ra7 #16r5))
 
-        (buffer-x1 (binio:octet-vector 5 10 0 0 0
-                                       5 20 0 0 0))
-        (buffer-x2 (binio:octet-vector 0 10 ))
+        (buffer-x1 (binio:octet-vector 13 10 0 0 0
+                                       13 20 0 0 0))
+        (buffer-x2 (binio:octet-vector 8 10 ))
         )
           
 
   ;; Packing Tests
   ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
 
-  ;(protoc::eval-proto *test-form-1* (find-package :proto-test))
-  ;(protoc::eval-proto *test-form-2* (find-package :proto-test))
-  ;(protoc::eval-proto *test-form-3* (find-package :proto-test))
-  ;(protoc::eval-proto *test-form-4* (find-package :proto-test))
-  ;(protoc::eval-proto *test-form-x1* (find-package :proto-test))
 
-    (re-def)
+    ;(re-def)
 
     ;; test 1 - varint
     (test-1 buffer-1 'test1 'a 150)
@@ -183,7 +176,7 @@
                       (= (slot-value a 'a)
                          (slot-value b 'a)))))
     
-    ;; test 4 - repeated packed varint
+    ;; test 4 - repeated unpacked varint
     (test-1 buffer-4 'test4 'd 
             (make-array 3 
                         :element-type '(signed-byte 32)
@@ -191,6 +184,7 @@
     
     ;; Test x1 - repeated unpacked fixed32
     (let ((msg (make-instance 'proto-test::testx1)))
+      (setf (slot-value msg 'a) (make-array 0 :adjustable t :fill-pointer t))
       (vector-push-extend 10 (slot-value msg 'proto-test::a))
       (vector-push-extend 20 (slot-value msg 'proto-test::a))
       (test-1 buffer-x1 'testx1 'a (vector 10 20)
@@ -205,12 +199,15 @@
     t))
 
 
+(defun redef-load ()
+  (load-proto-set
+   "/home/ntd/src/s-protobuf/tests/test.protobin"))
 
-;;(let ((msg (make-instance 'testx2))
-      ;;(msg-u (make-instance 'testx2)))
-  ;;(setf (slot-value msg 'a) :b)
-  ;;(multiple-value-bind (len buf)
-      ;;(pb::pack msg)
-    ;;;(values len buf)))
-    ;;(pb::unpack buf msg-u)))
 
+(defun test-inline ()
+  (redef)
+  (test))
+
+(defun test-load ()
+  (redef-load)
+  (test))

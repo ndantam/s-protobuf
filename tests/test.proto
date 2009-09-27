@@ -1,15 +1,30 @@
 package proto_test;
 
-enum special_command {
-    NONE = 0;
-    RESET = 1;
-    EMERGENCY_STOP = 2;
-    APPLY_BRAKE = 3;
-    RELEASE_BRAKE = 4;
+message test1 {
+  required int32 a = 1;
 }
 
-message SearchRequest {
-  required string query = 1;
-  repeated int32 page_number = 2;
-  optional int32 result_per_page = 3;
-      }
+message test2 {
+  required string b = 2;
+}
+
+message test3 {
+  required test1 c = 3;
+}
+
+message test4 {
+  repeated int32 d = 4;
+}
+
+message testx1 {
+  repeated sfixed32 a = 1;
+}
+
+message testx2 {
+  enum e {
+    A = 0;
+    B = 10;
+    C = 20;
+  }
+  required e a = 1;
+}

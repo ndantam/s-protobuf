@@ -44,4 +44,6 @@
   :description "Protocol Buffer compiler and runtime"
   :components ((:file "binio")
                (:file "proto" :depends-on ("binio"))
-               (:file "protoc" :depends-on ("proto" "binio"))))
+               (:file "protoc" :depends-on ("proto" "binio"))
+               (:file "descriptor" :depends-on ("protoc"))
+               (:file "descriptor-functions" :depends-on ("descriptor"))))
