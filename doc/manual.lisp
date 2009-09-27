@@ -81,7 +81,11 @@
                     making it negative is a kludge."))
            (:sect 2 "Bugs"
                   (itemizedlist
-                   (listitem (para "Packages -- sort of supported, but probably not too well"))))
+                   (listitem (para "Insufficient testcases"))
+                   (listitem (para "Packages -- sort of supported, but probably not too well"))
+                   (listitem (para "Required/Optional fields -- we
+                     don't currently care if required fields aren't
+                     there"))))
            (:sect 2 "Missing Features"
                   (itemizedlist
                    (listitem (para "Skipping Unknown Fields"))
@@ -127,11 +131,11 @@
                    ,(string #\Newline)
                    ";; A nested message"
                    "(protoc:def-proto-msg test3"
-                   "    (field c test1 3))"
+                   "  (field c test1 3))"
                    ,(string #\Newline)
                    ";; repeated fields"
-                   "(protoc:def-proto-msg test4
-                       (field d :int32 4 :repeated t :packed nil))"
+                   "(protoc:def-proto-msg test4"
+                   "  (field d :int32 4 :repeated t :packed nil))"
                    ,(string #\Newline)
                    ";; enums"
                    "(protoc:def-proto-msg testx2"
