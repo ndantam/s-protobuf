@@ -36,6 +36,7 @@
   (:export
    :pack
    :unpack
+   :packed-size
    :enum-symbol
    :enum-code
    :protocol-buffer))

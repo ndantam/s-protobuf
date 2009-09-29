@@ -133,24 +133,24 @@
   ;; string decoding
   (assert (string= "testing"
                    (pb::decode-string (binio:octet-vector 
-                                       #16r12 #16r07
-                                       #16r74 #16r65 #16r73 
-                                       #16r74 #16r69 #16r6e #16r67)
+                                       #x12 #x07
+                                       #x74 #x65 #x73 
+                                       #x74 #x69 #x6e #x67)
                                       1)))
 
-  (let ((buffer-1 (binio:octet-vector #16r8 #16r96 #16r1))
+  (let ((buffer-1 (binio:octet-vector #x8 #x96 #x1))
         (buffer-2 (binio:octet-vector 
-                   #16r12 #16r07
-                   #16r74 #16r65 #16r73 
-                   #16r74 #16r69 #16r6e #16r67))
+                   #x12 #x07
+                   #x74 #x65 #x73 
+                   #x74 #x69 #x6e #x67))
         (buffer-3 (binio:octet-vector 
-                   #16r1a #16r03
-                   #16r08 #16r96 #16r01))
-        ;; typecode is #16r22 for packed
-        (buffer-4 (binio:octet-vector #16r20 ;#16r06
-                                      #16r03 
-                                      #16r20 #16r8e #16r02
-                                      #16r20 #16r9e #16ra7 #16r5))
+                   #x1a #x03
+                   #x08 #x96 #x01))
+        ;; typecode is #x22 for packed
+        (buffer-4 (binio:octet-vector #x20 ;#x06
+                                      #x03 
+                                      #x20 #x8e #x02
+                                      #x20 #x9e #xa7 #x5))
 
         (buffer-x1 (binio:octet-vector 13 10 0 0 0
                                        13 20 0 0 0))

@@ -43,6 +43,7 @@
    :encode-double-float :decode-double-float
    :encode-svarint :decode-svarint
    :encode-uvarint :decode-uvarint
+   :uvarint-size :svarint-size
    :make-octet-vector :octet-vector
    :encode-utf8 :decode-utf8
    :utf8-size
@@ -120,7 +121,7 @@
   (declare (octet-vector buffer))
   (let ((result (decode-uint buffer endian start bits))
         (count (/ bits 8)))
-    (when (= (ldb (byte 1 (1- (* 8 count))) result) 1) ; sign bit, negative
+    (when (logbitp (1- (* 8  count)) result)
       (decf result (ash 1 (* 8 count))))
     (values result (/ bits 8))))
 
@@ -196,11 +197,7 @@
 
 (defun uvarint-size (value)
   (declare (type (integer 0) value))
-  (loop 
-     for v = value then (ash v -7)
-     for i from 0
-     until (and (zerop v) (> i 0))
-     finally (return i)))
+  (max 1 (ceiling (integer-length value) 7)))
 
 (defun svarint-size (value)
   (uvarint-size (varint-zigzag value)))
@@ -233,13 +230,14 @@
 (defun decode-uvarint (buffer start)
   (declare (octet-vector buffer))
   (loop
-     with accum = 0
-     for i from 0
-     for j = (+ i start)
-     do (setf (ldb (byte 7 (* i 7)) accum)
-              (ldb (byte 7 0) (aref buffer j)))
-     until (zerop (ldb (byte 1 7) (aref buffer j)))
-     finally (return (values accum (1+ i)))))
+     for i from 1      ; octets read
+     for j from start  ; position in buffer
+     for k from 0 by 7 ; position in integer
+     for octet = (aref buffer j)
+     for piece = (ldb (byte 7 0) octet)
+     for accum = piece then (dpb piece (byte 7 k) accum)
+     when (not (logbitp 7 octet))
+     return (values accum i)))
 
 (defun encode-svarint (value &optional
                        (buffer (make-octet-vector (svarint-size value)))
@@ -253,6 +251,8 @@
       (decode-uvarint buffer start)
   (values (varint-unzigzag uv) i)))
 
+
+;; rather (quite) slow...
 (defun read-octets (stream1 &key limit)
   "read up to limit bytes from stream or eof if limit is nil"
   (loop  with v =  (make-array 0 
@@ -268,7 +268,12 @@
 
 (defun read-file-octets (filespec &key limit)
   (with-open-file (s filespec :element-type 'octet)
-    (read-octets s :limit limit)))
+    (let ((buffer (make-octet-vector (if limit
+                                         (max (file-length s) limit)
+                                         (file-length s)))))
+      (read-sequence buffer s)
+      buffer)))
+
 
 ;; strings
 
@@ -355,6 +360,7 @@
     (assert (test-sint -10 :little 32))
     (assert (test-sint -10 :little 64))
     (assert (test-sint -4097 :little 64))
+    (assert (test-sint 10 :little 64))
     ;; test varint zigzags based on google's examples
     (assert (test-zigzag 0  0))
     (assert (test-zigzag -1  1))
@@ -364,9 +370,9 @@
     ;; varints
     ;; example encodings from the google docs
     (assert (test-uvarint-encoding 
-             150 (octet-vector #16r96 1)))
+             150 (octet-vector #x96 1)))
     (assert (test-uvarint-encoding 
-             300 (octet-vector #2r10101100 #2r00000010)))
+             300 (octet-vector #b10101100 #b00000010)))
     (assert (test-uvarint 10))
     (assert (test-uvarint 100))
     (assert (test-uvarint 100000))
@@ -384,7 +390,7 @@
     (assert (test-svarint -100000))
     ;; utf8
     (assert (test-utf8 "testing" 
-                       (octet-vector #16r74 #16r65 #16r73 
-                                     #16r74 #16r69 #16r6e #16r67)))
+                       (octet-vector #x74 #x65 #x73 
+                                     #x74 #x69 #x6e #x67)))
     )
   t)

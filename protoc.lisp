@@ -225,7 +225,7 @@
                  (let ((strbuf (gensym))
                        (size (gensym)))
                    `(multiple-value-bind (,size ,strbuf)
-                        (binio::encode-utf8 ,valsym)
+                        (binio:encode-utf8 ,valsym)
                       (incf ,startsym 
                             (binio:encode-uvarint ,size ,bufsym ,startsym))
                       (replace ,bufsym ,strbuf :start1 ,startsym)
@@ -238,7 +238,7 @@
 
 
 (defun gen-start-code-size (type pos)
-  (binio::uvarint-size (make-start-code-sym pos type)))
+  (binio:uvarint-size (make-start-code-sym pos type)))
 
 (defun gen-scalar-size (type slot pos)
   `(+ ,(gen-start-code-size type pos)
@@ -247,13 +247,13 @@
         ((fixed32-p type) 4)
         ((eq :bool type) 1)
         ((uvarint-p type)
-         `(binio::uvarint-size ,slot))
+         `(binio:uvarint-size ,slot))
         ((svarint-p type) 
-         `(binio::svarint-size ,slot))
+         `(binio:svarint-size ,slot))
         ((enum-type-p type) 
-         `(binio::uvarint-size (,(symcat type 'code) ,slot)))
+         `(binio:uvarint-size (,(symcat type 'code) ,slot)))
         ((eq :string type)
-         `(pb::length-delim-size (binio::utf8-size ,slot)))
+         `(pb::length-delim-size (binio:utf8-size ,slot)))
         ((eq :bytes type)
          `(pb::length-delim-size (length ,slot)))
         (t `(pb::length-delim-size (pb::packed-size ,slot))))))
@@ -310,7 +310,7 @@
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package)))
-      `(defmethod pb::packed-size ((,protobuf ,name))
+      `(defmethod pb:packed-size ((,protobuf ,name))
          (+ ,@(mapcan (lambda (field-spec)
                         (when (symbol-string= (car field-spec) "FIELD")
                           (destructuring-bind (field name type position 
@@ -378,8 +378,8 @@
           (i (gensym)))
       `(defmethod pb:pack ((,protobuf ,name)
                            &optional
-                           (,buffer (binio::make-octet-vector 
-                                     (pb::packed-size ,protobuf)))
+                           (,buffer (binio:make-octet-vector 
+                                     (pb:packed-size ,protobuf)))
                            (,start 0))
          (let ((,i ,start))
            ,@(mapcan (lambda (field-spec)
@@ -402,9 +402,9 @@
 (defun get-decoder-name (protobuf-type)
   (case protobuf-type
     ((:int32 :uint32 :uint64 :enum)
-     'binio::decode-uvarint)
+     'binio:decode-uvarint)
     ((:sint32 :sint64)
-     'binio::decode-svarint)
+     'binio:decode-svarint)
     ((:fixed32)
      'pb::decode-uint32)
     ((:sfixed32)
@@ -475,7 +475,7 @@
   (declare (ignore package))
   (destructuring-bind (message name &rest field-specs) form
     (declare (ignore message))
-    `(defmethod pb::unpack (buffer
+    `(defmethod pb:unpack (buffer
                             (protobuf ,name)
                             &optional (start 0) (end (length buffer)))
        (declare (binio:octet-vector buffer))
