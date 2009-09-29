@@ -90,10 +90,12 @@
 
 (defun aref-endian (buffer index start count endian)
   (declare (fixnum start count index))
+  (declare (octet-vector buffer))
   (aref buffer (index-endian index start count endian)))
 
 (defun (setf aref-endian) (value buffer index start count endian)
   (declare (fixnum start count index))
+  (declare (octet-vector buffer))
   (setf (aref buffer (index-endian index start count endian))
         value))
 
@@ -102,6 +104,7 @@
 (defun decode-uint (buffer endian &optional (start 0) (bits 32))
   (declare (fixnum start bits)
            (type (octet-vector) buffer))
+  (declare (octet-vector buffer))
   (let ((accum 0)
         (count (/ bits 8)))
     (declare (integer accum))
@@ -114,6 +117,7 @@
 (defun decode-sint (buffer endian &optional (start 0) (bits 32) )
   (declare (fixnum start bits)
            (type (octet-vector) buffer))
+  (declare (octet-vector buffer))
   (let ((result (decode-uint buffer endian start bits))
         (count (/ bits 8)))
     (when (= (ldb (byte 1 (1- (* 8 count))) result) 1) ; sign bit, negative
@@ -126,6 +130,7 @@
            (symbol endian))
   (let* ((count (/ bits 8))
          (buffer (or buffer (make-octet-vector count))))
+    (declare (octet-vector buffer))
     (dotimes (i count)
       (setf (aref-endian buffer i start count endian)
             (ldb (byte 8 (* i 8)) val)))
@@ -137,6 +142,7 @@
 (defun decode-double-float (buffer endian &optional (start 0))
   (let ((ilow  (decode-uint buffer endian start))
         (ihi (decode-sint buffer endian (+ 4 start))))
+    (declare (octet-vector buffer))
     (case endian
       (:little (sb-kernel:make-double-float ihi ilow))
       (:big (sb-kernel:make-double-float ilow ihi)))))
@@ -145,6 +151,7 @@
   (let ((high (sb-kernel:double-float-high-bits val))
         (low (sb-kernel:double-float-low-bits val))
         (buffer (or buffer (make-octet-vector 8))))
+    (declare (octet-vector buffer))
     (let ((i (dpb high (byte 32 32) low)))
       (encode-int i endian buffer start 64))
     buffer))
@@ -152,12 +159,14 @@
 
  
 (defun decode-single-float (buffer endian &optional (start 0))
+  (declare (octet-vector buffer))
   (let ((i (decode-sint buffer endian start)))
     (sb-kernel:make-single-float i)))
 
 (defun encode-single-float (val endian &optional buffer (start 0))
   (let ((bits (sb-kernel:single-float-bits val))
         (buffer (or buffer (make-octet-vector 4))))
+    (declare (octet-vector buffer))
     (encode-int bits endian buffer start)))
 
 
@@ -200,6 +209,7 @@
                        (buffer (make-octet-vector (uvarint-size value)))
                        (start 0))
   (declare (type (integer 0) value))
+  (declare (octet-vector buffer))
   (loop 
      for v = value then (ash v -7)
      for v-next = (ash v -7)
@@ -221,6 +231,7 @@
      finally (return (values (- i start) buffer))))
 
 (defun decode-uvarint (buffer start)
+  (declare (octet-vector buffer))
   (loop
      with accum = 0
      for i from 0
@@ -233,9 +244,11 @@
 (defun encode-svarint (value &optional
                        (buffer (make-octet-vector (svarint-size value)))
                        (start 0))
+  (declare (octet-vector buffer))
   (encode-uvarint (varint-zigzag value) buffer start))
 
 (defun decode-svarint (buffer start)
+  (declare (octet-vector buffer))
   (multiple-value-bind (uv i)
       (decode-uvarint buffer start)
   (values (varint-unzigzag uv) i)))
