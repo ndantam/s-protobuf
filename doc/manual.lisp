@@ -55,7 +55,7 @@
                                  "~ndantam3/git/s-protobuf.git")))
            (:sect 2 "Authors"
                   (para "S-PROTOBUF was written by Neil
-                  T. Dantam ({first,middle,last-initial}@gatech.edu).
+                  T. Dantam ({first-initial,middle-initial,last-initial}@gatech.edu).
                   The original Protocol Buffers design was developed
                   internally at Google by a number of people.  Current
                   efforts seem to be led by Kenton
