@@ -56,10 +56,11 @@
            (:sect 2 "Authors"
                   (para "S-PROTOBUF was written by Neil
                   T. Dantam ({first-initial,middle-initial,last-initial}@gatech.edu).
-                  The original Protocol Buffers design was developed
-                  internally at Google by a number of people.  Current
-                  efforts seem to be led by Kenton
-                  Varda ({firstname}@google.com)."))
+                  Zach Beane provided some helpful suggestions to
+                  clean up parts of the code.  The original Protocol
+                  Buffers design was developed internally at Google by
+                  a number of people.  Current efforts seem to be led
+                  by Kenton Varda ({firstname}@google.com)."))
            (:bsd-license 2 "Legal" 
                          "2008" "Google Inc." 
                          "2009" "Georgia Tech Research Corporation"))
@@ -105,45 +106,80 @@
                                     fields (Google may not support it,
                                     but we could)")))))
     (:sect 1 "Usage"
-           (:sect 2 "Using .proto files"
-                  (para "S-PROTOBUF reads in the binary output of"
-                  (command protoc)".  Thus, you should first run your
-                  .proto file through" (command protoc) "using the -o
-                  option: ")
-                  (programlisting "$ protoc -omyfile.protobin myfile.proto")
-                  (para "Then you can use the macro
-                  function " (function "protoc:load-proto-set") "
-                  which reads in the .protobin and expands into the
-                  definitions for classes, functions, and methods.")
-                  (programlisting "(require :s-protobuf)"
-                                  "(protoc:load-proto-set \"myfile.protobin\")")
-                  )
-           (:sect 2 "Writing protobuf's as S-Expressions"
-                  (para "If curly braces make you angry, you can also
-                  write the protocol buffer definitions as
-                  S-Expressions.  Here is documentation by example:")
-                  (programlisting 
-                   "(require :s-protobuf)"
-                   ,(string #\Newline)
-                   ";; A simple message"
-                   "(protoc:def-proto-msg test1"
-                   "  (field a :int32 1))"
-                   ,(string #\Newline)
-                   ";; A nested message"
-                   "(protoc:def-proto-msg test3"
-                   "  (field c test1 3))"
-                   ,(string #\Newline)
-                   ";; repeated fields"
-                   "(protoc:def-proto-msg test4"
-                   "  (field d :int32 4 :repeated t :packed nil))"
-                   ,(string #\Newline)
-                   ";; enums"
-                   "(protoc:def-proto-msg testx2"
-                   "  (enum e (:a 0) (:b 10) (:c 20))"
-                   "  (field a testx2-e 1 :repeated nil :packed nil))"
-                  )
-                  (para "If you want some more details, you can try
-                  macroexpanding " (function load-proto-set) ".")))
+           (:sect 2 "Compiling Encoders"
+                  (:sect 3 "Using .proto files"
+                         (para "S-PROTOBUF reads in the binary output of"
+                               (command protoc)".  Thus, you should
+                           first run your .proto file
+                           through" (command protoc) "using the -o
+                           option: ")
+                         (programlisting "$ protoc -omyfile.protobin myfile.proto")
+                         (para "Then you can use the macro
+                           function " (function "protoc:load-proto-set") "
+                           which reads in the .protobin and expands
+                           into the definitions for classes,
+                           functions, and methods.")
+                         (programlisting "(require :s-protobuf)"
+                                         "(protoc:load-proto-set \"myfile.protobin\")")
+                         (para "The class will be put into the package
+                           listed in .proto file, or CL-USER is none
+                           was specified.  Nested packages will
+                           probably not work very well."))
+                  (:sect 3 "Writing protobuf's as S-Expressions"
+                         (para "If curly braces make you angry, you
+                           can also write the protocol buffer
+                           definitions as S-Expressions.  Here is
+                           documentation by example:")
+                         (programlisting 
+                          "(require :s-protobuf)"
+                          ,(string #\Newline)
+                          ";; A simple message"
+                          "(protoc:def-proto-msg test1"
+                          "  (field a :int32 1))"
+                          ,(string #\Newline)
+                          ";; A nested message"
+                          "(protoc:def-proto-msg test3"
+                          "  (field c test1 3))"
+                          ,(string #\Newline)
+                          ";; repeated fields"
+                          "(protoc:def-proto-msg test4"
+                          "  (field d :int32 4 :repeated t :packed nil))"
+                          ,(string #\Newline)
+                          ";; enums"
+                          "(protoc:def-proto-msg testx2"
+                          "  (enum e (:a 0) (:b 10) (:c 20))"
+                          "  (field a testx2-e 1 :repeated nil :packed nil))"
+                          )
+                         (para "The class will be put into whatever
+                           package the symbol for it's name is in.")
+                         (para "If you want some more details, you can
+                           try macroexpanding " (function
+                           load-proto-set) ".")))
+           (:sect 2 "Using Encoders"
+                  (para "Each protobuf message will be compiled into a
+                    class.  Identifiers are mangled into a lispy
+                    form (upcased symbols, hyphenated words).  Enums
+                    will be translated to and from keyword symbols on
+                    encoding and decoding.  Repeated fields are
+                    vectors which are are simple-array's when
+                    possible (packed types with fixed bit size).")
+                  (itemizedlist
+                   (listitem (:docfun "PB:PACK" 
+                                      "Generic function, packs
+                                      protobuf into an octet buffer"
+                                      buffer (protobuf "The object to
+                                      encode") &optional buffer
+                                      start))
+                   (listitem (:docfun "PB:UNPACK" 
+                                      "Generic function, unpacks a
+                                        protobuf object from an octet
+                                        buffer"
+                                      (bytes-read buffer) 
+                                      buffer protobuf &optional start end))
+                   (listitem (:docfun "PB:PACKED-SIZE"  
+                                      "Generic function, number of
+                                      octets required to encode
+                                      protobuf" size protobuf)) )))
     (:sect 1 "Wire Format"
            (:sect 2 "Varints"
                   (para "Varints are a space-efficient encoding of
