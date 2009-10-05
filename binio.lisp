@@ -62,7 +62,7 @@
 
 ;; types
 (deftype octet () '(unsigned-byte 8))
-(deftype octet-vector (&optional (count '*)) 
+(deftype octet-vector (&optional count)
   `(simple-array octet (,count)))
 
 (defun make-octet-vector (count)
