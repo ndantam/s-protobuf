@@ -167,14 +167,14 @@
                    (listitem (:docfun "PB:PACK" 
                                       "Generic function, packs
                                       protobuf into an octet buffer"
-                                      buffer (protobuf "The object to
+                                      (packed-size buffer) (protobuf "The object to
                                       encode") &optional buffer
                                       start))
                    (listitem (:docfun "PB:UNPACK" 
                                       "Generic function, unpacks a
                                         protobuf object from an octet
                                         buffer"
-                                      (bytes-read buffer) 
+                                      (protobuf bytes-read) 
                                       buffer protobuf &optional start end))
                    (listitem (:docfun "PB:PACKED-SIZE"  
                                       "Generic function, number of
