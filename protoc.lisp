@@ -401,7 +401,7 @@
 
 (defun get-decoder-name (protobuf-type)
   (case protobuf-type
-    ((:int32 :uint32 :uint64 :enum)
+    ((:int32 :uint32 :int64 :uint64 :enum)
      'binio:decode-uvarint)
     ((:sint32 :sint64)
      'binio:decode-svarint)
@@ -496,12 +496,18 @@
                                                      (optional nil))
                               field-spec
                             (declare (ignore field default required optional))
-                            `((,position 
-                               (assert (= typecode ,(wire-typecode type
-                                                                       repeated packed)))
-                               ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
-                               )))))
-                      field-specs)
+                            (let ((desired-typecode (wire-typecode type repeated packed)))
+                              `((,position 
+                                 (assert 
+                                  (= typecode 
+                                     ,desired-typecode) ()
+                                     "Invalid typecode for field ~A. Wanted ~A (~A) but found ~A (~A)." 
+                                     (quote ,name) 
+                                     ,desired-typecode (pb:typecode-meaning ,desired-typecode)
+                                     typecode (pb:typecode-meaning typecode))
+                                 ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
+                                 ))))))
+                       field-specs)
              (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
                                pos ',name buffer))))))))
 

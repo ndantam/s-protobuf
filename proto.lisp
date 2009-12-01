@@ -30,6 +30,7 @@
 ;; Runtime support functions for protocol buffers
 ;; Author Neil T. Dantam
 
+
 (defpackage :protocol-buffer
   (:nicknames :pb)
   (:use :cl :binio)
@@ -39,7 +40,8 @@
    :packed-size
    :enum-symbol
    :enum-code
-   :protocol-buffer))
+   :protocol-buffer
+   :typecode-meaning))
 
 (in-package :protocol-buffer)
 
@@ -130,27 +132,36 @@
 ;;        ((length-delim-p type) 2)
 ;;        (t 2))))
 
-;; runtime support functions
+;;; runtime support functions
+
+;;; All decoding functions return (values object bytes-decoded)
 
 ;; make it obvious what we're doing
 (defmacro with-decoding ((value length) decode-expr &body body)
   `(multiple-value-bind (,value ,length)
        ,decode-expr
+     (declare (integer ,length))
      ,@body))
 
 (defun make-start-code (slot-position typecode)
   (logior (ash slot-position 3) typecode))
 
 (defun read-start-code (buffer start)
+  (declare (octet-vector buffer)
+           (integer start))
   "returns (values position typecode bytes-read)"
   (with-decoding (vi i) (decode-uvarint buffer start)
     (values (ash vi -3) (ldb (byte 3 0) vi) i)))
 
 (defun encode-start-code (slot-position typecode buffer start)
+  (declare (octet-vector buffer)
+           (integer start typecode slot-position))
   (encode-uvarint (make-start-code slot-position typecode)
                  buffer start))
 
 (defun pack-embedded (protobuf buffer start)
+  (declare (octet-vector buffer)
+           (integer start))
   (let* ((size (packed-size protobuf))
          (size-size (binio:encode-uvarint size buffer start))
          (encoded-size (pack protobuf buffer (+ start size-size))))
@@ -173,24 +184,39 @@
 (defun length-delim-size (length)
   (+ (binio::uvarint-size length) length))
 
+(defun typecode-meaning (typecode)
+  (ecase typecode
+    (0 :varint)
+    (1 :fixed64)
+    (5 :fixed32)
+    (2 :size-delimited)))
 
-;; encoders
+;;; encoders
 (defun encode-bool (val buffer start)
   (setf (aref buffer start) (if val 1 0))
   1)
 
-;; fixed-width decoders
+;;; fixed-width decoders
 (defun decode-uint32 (buffer start)
-  (binio:decode-uint buffer :little start 32))
+  (values (binio:decode-uint buffer :little start 32)
+          4))
+
 (defun decode-sint32 (buffer start)
-  (binio:decode-sint buffer :little start 32))
+  (values (binio:decode-sint buffer :little start 32) 
+          4))
+
 (defun decode-uint64 (buffer start)
-  (binio:decode-uint buffer :little start 64))
+  (values (binio:decode-uint buffer :little start 64)
+          8))
+
 (defun decode-sint64 (buffer start)
-  (binio:decode-sint buffer :little start 64))
+  (values (binio:decode-sint buffer :little start 64)
+          8))
+
 (defun decode-double (buffer start)
-  (binio:decode-double-float buffer 
-                             :little start))
+  (values (binio:decode-double-float buffer 
+                                     :little start)
+          8))
 
 (defun decode-bool (buffer start)
   (values (case (aref buffer start)
@@ -216,6 +242,8 @@ returns (values length length-of-length)"
          
 (defun decode-length-delim (buffer start decoder)
   "decoder is (lambda (buffer start end)"
+  (declare (octet-vector buffer)
+           (integer start))
   (let ((i start))
     (with-decoding (len len-len)
         (decode-length-and-incf-start i buffer)
@@ -225,6 +253,8 @@ returns (values length length-of-length)"
         (values val (+ len len-len))))))
 
 (defun decode-string (buffer start)
+  (declare (octet-vector buffer)
+           (integer start))
   (decode-length-delim buffer start 
                        (lambda (buffer start end)
                          (binio::decode-utf8 buffer 
@@ -232,6 +262,8 @@ returns (values length length-of-length)"
                                              :buffer-end end))))
 
 (defun unpack-embedded-protobuf (buffer protobuf start)
+  (declare (octet-vector buffer)
+           (integer start))
   (decode-length-delim buffer start
                        (lambda (buffer start end)
                          (unpack buffer protobuf start end))))
@@ -241,6 +273,8 @@ returns (values length length-of-length)"
                      (fixed-bit-size nil) 
                      (start 0) 
                      end )
+  (declare (octet-vector buffer)
+           (integer start))
   (assert (or (not fixed-bit-size) 
               (zerop (rem fixed-bit-size 8))) ()
               "Can only decode integral-octet-sized types")
