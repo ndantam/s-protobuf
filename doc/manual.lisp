@@ -40,13 +40,18 @@
     (title "S-PROTOBUF")
     (:sect 1 "Introduction"
            (:sect 2 "Overview"
-                  (para "This packagage, s-protobuf, provides a Common
-                    Lisp implemenation for the" ((ulink url
+                  (para "This package, S-PROTOBUF, provides a Common
+                    Lisp implementation for the" ((ulink url
                     "http://code.google.com/apis/protocolbuffers/docs/overview.html")
                                                  "Protocol Buffers")
                     "data encoding format,
                     created by Google."))
-
+           (:sect 2 "Status"
+                  (para "S-PROTOBUF supports message packing and
+                  unpacking using all the specified data types,
+                  repeated fields, and nested messages.  Packed fields
+                  may not quite be there yet. There is no support for
+                  Extensions or Services."))
            (:sect 2 "Getting S-PROTOBUF"
                   (programlisting 
                    ,(concatenate 'string
@@ -61,6 +66,30 @@
                   Buffers design was developed internally at Google by
                   a number of people.  Current efforts seem to be led
                   by Kenton Varda ({firstname}@google.com)."))
+           (:sect 2 "Alternatives"
+                  (para "If S-PROTOBUF or Protocol Buffers in general
+                  doesn't meet your needs, here are some things that
+                  might")
+                  (itemizedlist
+                   (listitem 
+                    (para 
+                     ((ulink 
+                       url 
+                       "http://code.google.com/p/protobuf/wiki/ThirdPartyAddOns")
+                      "Other Protobuf Implementations")))
+
+                   (listitem (para ((ulink url "http://www.asn1.org/")
+                                    "ASN.1")))
+                   (listitem (para ((ulink url 
+                                           "http://developers.facebook.com/thrift/")
+                                    "Facebook Thrift")))
+                   (listitem 
+                    (para 
+                     ((ulink 
+                       url 
+                       "http://en.wikipedia.org/wiki/External_Data_Representation")
+                      "XDR")))
+                   ))
            (:bsd-license 2 "Legal" 
                          "2008" "Google Inc." 
                          "2009" "Georgia Tech Research Corporation"))
