@@ -31,9 +31,18 @@
 ;; OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-;; Protocol Buffer Compiler for CL
-;; Author: Neil T. Dantam
+;;;; Protocol Buffer Compiler for CL
+;;;; Author: Neil T. Dantam
 
+;;;; This is damn ugly, and I should really do a better job.
+;;;;
+;;;; FIXME: remove symbol pollution via gensysms 
+;;;;  (not a catastrophic unless library users are doing strange things 
+;;;;  with internal symbols in package protocol-buffer-compiler
+;;;;
+;;;; FIXME: Instead of "directly" generating so much code, 
+;;;;   move some pieces into macros and then just generate calls to those.  
+;;;;   That should make this process significantly easier to understand.
 
 
 (defpackage :protocol-buffer-compiler
