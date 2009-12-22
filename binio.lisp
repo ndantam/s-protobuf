@@ -59,8 +59,10 @@
 ;; decoding fuctions:
 ;;  (buffer &optional start) => (values value bytes-decoded)
 
+;;;;;;;;;;;;;
+;;; types ;;;
+;;;;;;;;;;;;;
 
-;; types
 (deftype octet () '(unsigned-byte 8))
 (deftype octet-vector (&optional count)
   `(simple-array octet (,count)))
@@ -77,10 +79,13 @@
          (setf (aref v i) x))
     v))
 
-;; some endian handling
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; some endian handling ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun index-endian (index start count endian)
-  (declare (fixnum start count index))
+  (declare (fixnum start count index)
+           (type symbol endian))
   (case endian
     (:little 
      (+ start index)) 
@@ -100,7 +105,9 @@
   (setf (aref buffer (index-endian index start count endian))
         value))
 
-;; integer types
+;;;;;;;;;;;;;;;;;;;;;
+;;; integer types ;;;
+;;;;;;;;;;;;;;;;;;;;;
 
 (defun decode-uint (buffer endian &optional (start 0) (bits 32))
   (declare (fixnum start bits)
@@ -138,42 +145,55 @@
     (values (/ bits 8) buffer)))
 
 
-;; floating point types
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; floating point types ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro def-cffi-cast (name from-lisp-type from-c-type to-c-type)
+  (let ((val (gensym))
+        (x (gensym)))
+    `(defun ,name (,val)
+       "Use CFFI to extract the bits of val by a C-like cast."
+       (declare (type ,from-lisp-type ,val))
+       (cffi:with-foreign-object (,x ,from-c-type)
+         (setf (cffi:mem-ref ,x ,from-c-type) ,val)
+         (cffi:mem-ref ,x ,to-c-type)))))
+                        
+(def-cffi-cast scary-single-float-bits single-float :float :int32) 
+(def-cffi-cast scary-make-single-float (unsigned-byte 32) :uint32 :float)
+
+(def-cffi-cast scary-double-float-bits double-float :double :int64) 
+(def-cffi-cast scary-make-double-float (unsigned-byte 64) :uint64 :double)
+
 
 (defun decode-double-float (buffer endian &optional (start 0))
-  (let ((ilow  (decode-uint buffer endian start))
-        (ihi (decode-sint buffer endian (+ 4 start))))
-    (declare (octet-vector buffer))
-    (case endian
-      (:little (sb-kernel:make-double-float ihi ilow))
-      (:big (sb-kernel:make-double-float ilow ihi)))))
+  (declare (octet-vector buffer)
+           (symbol endian))
+  (scary-make-double-float (decode-uint buffer endian start 64)))
 
 (defun encode-double-float (val endian &optional buffer (start 0))
-  (let ((high (sb-kernel:double-float-high-bits val))
-        (low (sb-kernel:double-float-low-bits val))
+  (let ((bits (scary-double-float-bits val))
         (buffer (or buffer (make-octet-vector 8))))
     (declare (octet-vector buffer))
-    (let ((i (dpb high (byte 32 32) low)))
-      (encode-int i endian buffer start 64))
-    buffer))
+    (encode-int bits endian buffer start 64)))
 
 
- 
 (defun decode-single-float (buffer endian &optional (start 0))
   (declare (octet-vector buffer))
-  (let ((i (decode-sint buffer endian start)))
-    (sb-kernel:make-single-float i)))
+  (scary-make-single-float (decode-sint buffer endian start)))
 
 (defun encode-single-float (val endian &optional buffer (start 0))
-  (let ((bits (sb-kernel:single-float-bits val))
+  (let ((bits (scary-single-float-bits val))
         (buffer (or buffer (make-octet-vector 4))))
     (declare (octet-vector buffer))
     (encode-int bits endian buffer start)))
 
 
 
-
-;; varint types
+;;;;;;;;;;;;;;;;;;;;
+;;; varint types ;;;
+;;;;;;;;;;;;;;;;;;;;
 
 ;; arbitrary precision zig-zagging
 
@@ -274,8 +294,9 @@
       (read-sequence buffer s)
       buffer)))
 
-
-;; strings
+;;;;;;;;;;;;;;;
+;;; strings ;;;
+;;;;;;;;;;;;;;;
 
 (defun encode-utf8 (string 
                     &key 
@@ -320,6 +341,24 @@
              (let ((buffer (make-octet-vector (/ bits 8))))
                (encode-int value endian buffer 0 bits)
                (= value (decode-sint buffer endian 0 bits))))
+           (test-scary-single (x)
+             (= x 
+                (scary-make-single-float (scary-single-float-bits x))))
+           (test-scary-double (x)
+             (= x 
+                (scary-make-double-float (scary-double-float-bits x))))
+           (test-single (val buffer endian)
+             (multiple-value-bind (i-enc buf-enc)
+                 (encode-single-float val endian)
+               (and (= i-enc 4)
+                    (equalp buf-enc buffer)
+                    (= val (decode-single-float buffer endian)))))
+           (test-double (val buffer endian)
+             (multiple-value-bind (i-enc buf-enc)
+                 (encode-double-float val endian)
+               (and (= i-enc 8)
+                    (equalp buf-enc buffer)
+                    (= val (decode-double-float buffer endian)))))
            (test-zigzag (original encoded)
              (and 
               (= (varint-zigzag original ) encoded)
@@ -361,6 +400,16 @@
     (assert (test-sint -10 :little 64))
     (assert (test-sint -4097 :little 64))
     (assert (test-sint 10 :little 64))
+
+    ;; float encoding
+    (assert (test-scary-single 1.0))
+    (assert (test-scary-single (coerce pi 'single-float)))
+    (assert (test-scary-double 1d0))
+    (assert (test-scary-double (coerce pi 'double-float)))
+    (assert (test-single 1.0  (octet-vector 0 0 128 63) :little))
+    (assert (test-double 1d0  (octet-vector 0 0 0 0 0 0 240 63)  :little))
+
+
     ;; test varint zigzags based on google's examples
     (assert (test-zigzag 0  0))
     (assert (test-zigzag -1  1))
