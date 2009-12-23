@@ -473,7 +473,8 @@
        `((unless (slot-boundp ,objsym ',name)
            (setf ,slot 
                  (make-array 0 :element-type ',(lisp-type type) 
-                             :fill-pointer t)))
+                             :fill-pointer t
+                             :adjustble t)))
          (vector-push-extend ,(gen-unpack1 bufsym startsym type
                                            (if (primitive-type-p type) nil
                                                `(make-instance ',type)))
@@ -534,7 +535,7 @@
     ((and repeated packed)
      nil)
     ((and repeated (not packed))
-     `(make-array 0 :element-type ',(lisp-type type) :fill-pointer t))
+     `(make-array 0 :element-type ',(lisp-type type) :fill-pointer t :adjustable t))
     (t (error "Cant make init form for packed, nonrepeated elements"))))
           
     

@@ -160,10 +160,10 @@
          (setf (cffi:mem-ref ,x ,from-c-type) ,val)
          (cffi:mem-ref ,x ,to-c-type)))))
                         
-(def-cffi-cast scary-single-float-bits single-float :float :int32) 
+(def-cffi-cast scary-single-float-bits single-float :float :uint32) 
 (def-cffi-cast scary-make-single-float (unsigned-byte 32) :uint32 :float)
 
-(def-cffi-cast scary-double-float-bits double-float :double :int64) 
+(def-cffi-cast scary-double-float-bits double-float :double :uint64) 
 (def-cffi-cast scary-make-double-float (unsigned-byte 64) :uint64 :double)
 
 
@@ -298,6 +298,36 @@
 ;;; strings ;;;
 ;;;;;;;;;;;;;;;
 
+#-sbcl
+(defun encode-utf8 (string 
+                         &key 
+                         (string-start 0) (string-end (length string))
+                         buffer (buffer-start 0))
+  (let ((buffer (or buffer (make-octet-vector (- string-end string-start)))))
+    (loop 
+       for i-b from buffer-start
+       for i-s from string-start below string-end
+       do (setf (aref buffer i-b)
+                (char-code (aref string i-s))))
+    (values (- string-end string-start)
+            buffer)))
+  
+#-sbcl
+(defun decode-utf8 (buffer &key
+                         (buffer-start 0) (buffer-end (length buffer))
+                         (string-start 0) 
+                         (string (make-string (+ string-start 
+                                                 (- buffer-end buffer-start)))))
+  (loop 
+     for i-s from string-start
+     for i-b from buffer-start below buffer-end
+     do (setf (aref string i-s)
+              (code-char (aref buffer i-b))))
+  (values string
+          (- buffer-end buffer-start)))
+      
+
+#+sbcl
 (defun encode-utf8 (string 
                     &key 
                     (string-start 0) (string-end (length string))
@@ -310,8 +340,9 @@
                 (replace buffer octets :start1 buffer-start)
                 octets))))
 
-                                         
-  
+ 
+ 
+#+sbcl
 (defun decode-utf8 (buffer &key
                     (string-start 0) string 
                     (buffer-start 0) (buffer-end (length buffer)))
@@ -323,8 +354,6 @@
                (replace string str :start1 string-start)
                str)
             (- buffer-end buffer-start))))
-    
-
 
 (defun utf8-size (string)
   (multiple-value-bind (size buffer) 

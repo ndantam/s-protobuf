@@ -42,6 +42,7 @@
   ;; The version should get updated from the Makefile via sed
   :version "0.0.20090927"
   :description "Protocol Buffer compiler and runtime"
+  :depends-on (:cffi)
   :components ((:file "binio")
                (:file "proto" :depends-on ("binio"))
                (:file "protoc" :depends-on ("proto" "binio"))
