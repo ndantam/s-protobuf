@@ -474,7 +474,7 @@
            (setf ,slot 
                  (make-array 0 :element-type ',(lisp-type type) 
                              :fill-pointer t
-                             :adjustble t)))
+                             :adjustable t)))
          (vector-push-extend ,(gen-unpack1 bufsym startsym type
                                            (if (primitive-type-p type) nil
                                                `(make-instance ',type)))
