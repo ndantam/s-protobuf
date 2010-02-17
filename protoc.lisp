@@ -218,7 +218,7 @@
 (defun gen-pack1 (bufsym startsym valsym type)
   `(incf ,startsym
          ,(case type
-                ((:int32 :uint32 :uint64 :enum)
+                ((:int32 :uint32 :uint64 :int64 :enum)
                  `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
                 (:bool
                  `(pb::encode-bool ,valsym 
@@ -230,6 +230,9 @@
                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 32))
                 ((:fixed64 :sfixed64)
                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 64))
+                ((:double)
+                 `(binio:encode-double-float
+                   ,valsym :little ,bufsym ,startsym))
                 (:string
                  (let ((strbuf (gensym))
                        (size (gensym)))
@@ -305,14 +308,17 @@
         array-size)))
 
 (defun gen-slot-size (type objsym slot-name pos packed repeated)
-  (let ((slot `(slot-value ,objsym ',slot-name)))
-    (cond
-      ((and (not repeated) (not packed))
-       (gen-scalar-size type slot pos))
-      ((and repeated (not packed))
-       (gen-repeated-size type slot pos))
-      (packed
-       (gen-packed-size type slot pos)))))
+  `(if (slot-boundp ,objsym ',slot-name)
+       (progn 
+         ,(let ((slot `(slot-value ,objsym ',slot-name)))
+               (cond
+                 ((and (not repeated) (not packed))
+                  (gen-scalar-size type slot pos))
+                 ((and repeated (not packed))
+                  (gen-repeated-size type slot pos))
+                 (packed
+                  (gen-packed-size type slot pos)))))
+       0))
 
   
 (defun def-packed-size (form package)
@@ -339,43 +345,44 @@
          
 (defun gen-pack-slot (bufsym startsym objsym name pos type repeated packed)
   (let ((slot `(slot-value ,objsym ',name)))
-    (cond 
-      ;; scalar value
-      ((null repeated)
-       `( ;; write start code
-         (incf ,startsym 
-               (pb::encode-start-code ,pos 
-                                      ,(wire-typecode type)
-                                      ,bufsym ,startsym))
+    `((when (slot-boundp ,objsym ',name)
+      ,@(cond 
+         ;; scalar value
+         ((null repeated)
+          `( ;; write start code
+            (incf ,startsym 
+                  (pb::encode-start-code ,pos 
+                                         ,(wire-typecode type)
+                                         ,bufsym ,startsym))
 
-         ;; write data code
-         ,(gen-pack1 bufsym startsym slot type)))
-      ;; repeated unpacked value
-      ((and repeated (not packed))
-       (let ((countsym (gensym)))
-         `((dotimes (,countsym (length ,slot)) ; n times
-             ;; write start code
-             (incf ,startsym 
-                   (pb::encode-start-code ,pos 
-                                          ,(wire-typecode type)
-                                          ,bufsym ,startsym))
-             ;; write element
-             ,(gen-pack1 bufsym startsym  `(aref ,slot ,countsym) type)))))
-      ;; repeated value
-      ((and repeated packed)
-       `( ;; write start code
-         (incf ,startsym 
-               (pb::encode-start-code ,pos 
-                                      ,(wire-typecode :bytes)
-                                      ,bufsym ,startsym))
-         ;; write length
-         ,(gen-pack1 bufsym startsym 
-                     (gen-packed-size type slot) :uint64)
-         ;; write elements
-         ,(let ((isym (gensym)))
-               `(dotimes (,isym (length ,slot))
-                  ,(gen-pack1 bufsym startsym 
-                              `(aref ,slot ,isym) type))))))))
+            ;; write data code
+            ,(gen-pack1 bufsym startsym slot type)))
+         ;; repeated unpacked value
+         ((and repeated (not packed))
+          (let ((countsym (gensym)))
+            `((dotimes (,countsym (length ,slot)) ; n times
+                ;; write start code
+                (incf ,startsym 
+                      (pb::encode-start-code ,pos 
+                                             ,(wire-typecode type)
+                                             ,bufsym ,startsym))
+                ;; write element
+                ,(gen-pack1 bufsym startsym  `(aref ,slot ,countsym) type)))))
+         ;; repeated value
+         ((and repeated packed)
+          `( ;; write start code
+            (incf ,startsym 
+                  (pb::encode-start-code ,pos 
+                                         ,(wire-typecode :bytes)
+                                         ,bufsym ,startsym))
+            ;; write length
+            ,(gen-pack1 bufsym startsym 
+                        (gen-packed-size type slot) :uint64)
+            ;; write elements
+            ,(let ((isym (gensym)))
+                  `(dotimes (,isym (length ,slot))
+                     ,(gen-pack1 bufsym startsym 
+                                 `(aref ,slot ,isym) type))))))))))
          
 
 (defun msg-defpack ( form package)
