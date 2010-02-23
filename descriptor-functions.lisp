@@ -225,6 +225,7 @@
                (protoc::gen-msg-defs (cadr a) (cddr a)))
                ;(list (cons 'protoc::def-proto-msg (cdr a))))
               ((protoc::symbol-string= (car a) 'enum)
+               (setf (get (cadr a) 'enum) t) ;; must set here
                (list (cons 'protoc::def-proto-enum (cdr a))))))
           se))
               
@@ -234,6 +235,10 @@
         (macroize-se (sanitize-file filespec))))
 
 
+
+(defun get-proto-set (filespec)
+  (cons 'progn 
+        (macroize-se (sanitize-file filespec))))
 
 (defmacro dump-proto-set (filespec)
   (cons 'progn 
