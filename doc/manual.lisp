@@ -49,9 +49,9 @@
            (:sect 2 "Status"
                   (para "S-PROTOBUF supports message packing and
                   unpacking using all the specified data types,
-                  repeated fields, and nested messages.  Packed fields
-                  may not quite be there yet. There is no support for
-                  Extensions or Services."))
+                  repeated fields, and nested messages.  Packed
+                  repeated fields may not quite be there yet. There is
+                  no support for Extensions or Services."))
            (:sect 2 "Getting S-PROTOBUF"
                   (programlisting 
                    ,(concatenate 'string
@@ -92,7 +92,7 @@
                    ))
            (:bsd-license 2 "Legal" 
                          "2008" "Google Inc." 
-                         "2009" "Georgia Tech Research Corporation"))
+                         "2009-2010" "Georgia Tech Research Corporation"))
     (:sect 1 "Implementation Notes"
            (:sect 2 "Details"
                   (itemizedlist
@@ -121,9 +121,9 @@
                    (listitem (para "Skipping Unknown Fields"))
                    (listitem (para "Default Values"))
                    (listitem (para "Tracking Unknown Fields"))
-                   (listitem (para "Support for (#-sbcl) -- only
-                                    problem area is floating-point
-                                    coding"))
+                   (listitem (para "Better support for (#-sbcl).  The
+                                    basic testcases do run on CLISP.
+                                    UTF-8 only works on SBCL."))
                    (listitem (para "Extensions"))
                    (listitem (para "Services"))
                    ))
