@@ -159,11 +159,11 @@
 ;; a message
 (defmethod sanitize ((object descriptor-proto) &key parent package)
   (declare (ignore parent))
-  `( (message ,(sanitize-name-slot object 'name package)
-              ,@(map 'list (sanitizer nil package) 
-                     (slot-bound-value object 'enum-type))
-              ,@(map 'list (sanitizer object package) 
-                     (slot-value object 'field)))))
+  `((message ,(sanitize-name-slot object 'name package)
+             ,@(map 'list (sanitizer nil package) 
+                    (slot-bound-value object 'enum-type))
+             ,@(map 'list (sanitizer object package) 
+                    (slot-value object 'field)))))
 
 (defun sanitize-type (field-desc package)
   (let ((base-type (slot-value field-desc 'type)))
