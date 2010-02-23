@@ -215,38 +215,78 @@
     ;(default default)
     ;(repeated (make-array 0 :elment-type
 
+(defmacro pack-slot (start-place buffer slot type)
+  (let ((buffer-sym (gensym))
+        (slot-sym (gensym)))
+    `(incf ,start-place
+           (let ((,buffer-sym ,buffer)
+                 (,slot-sym ,slot))
+             ,(case type
+                    ((:int32 :uint32 :uint64 :int64 :enum)
+                     `(binio:encode-uvarint ,slot-sym ,buffer-sym ,start-place))
+                    (:bool
+                     `(pb::encode-bool ,slot-sym 
+                                       ,buffer-sym 
+                                       ,start-place))
+                    ((:sint32 :sint64)
+                     `(binio:encode-svarint ,slot-sym ,buffer-sym ,start-place))
+                    ((:fixed32 :sfixed32)
+                     `(binio:encode-int ,slot-sym :little ,buffer-sym ,start-place 32))
+                    ((:fixed64 :sfixed64)
+                     `(binio:encode-int ,slot-sym :little ,buffer-sym ,start-place 64))
+                    ((:double)
+                     `(binio:encode-double-float
+                       ,slot-sym :little ,buffer-sym ,start-place))
+                    (:string
+                     (let ((strbuf (gensym))
+                           (size (gensym)))
+                       `(multiple-value-bind (,size ,strbuf)
+                            (binio:encode-utf8 ,slot-sym)
+                          (incf ,start-place 
+                                (binio:encode-uvarint ,size ,buffer-sym ,start-place))
+                          (replace ,buffer-sym ,strbuf :start1 ,start-place)
+                          ,size)))
+                    (otherwise ;; pack object
+                     (if (enum-type-p type)
+                         `(binio:encode-uvarint (,(symcat type 'code) ,slot-sym)
+                                                ,buffer-sym ,start-place)
+                         `(pb::pack-embedded ,slot-sym ,buffer-sym ,start-place))))))))
+           
 (defun gen-pack1 (bufsym startsym valsym type)
-  `(incf ,startsym
-         ,(case type
-                ((:int32 :uint32 :uint64 :int64 :enum)
-                 `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
-                (:bool
-                 `(pb::encode-bool ,valsym 
-                                   ,bufsym 
-                                   ,startsym))
-                ((:sint32 :sint64)
-                 `(binio:encode-svarint ,valsym ,bufsym ,startsym))
-                ((:fixed32 :sfixed32)
-                 `(binio:encode-int ,valsym :little ,bufsym ,startsym 32))
-                ((:fixed64 :sfixed64)
-                 `(binio:encode-int ,valsym :little ,bufsym ,startsym 64))
-                ((:double)
-                 `(binio:encode-double-float
-                   ,valsym :little ,bufsym ,startsym))
-                (:string
-                 (let ((strbuf (gensym))
-                       (size (gensym)))
-                   `(multiple-value-bind (,size ,strbuf)
-                        (binio:encode-utf8 ,valsym)
-                      (incf ,startsym 
-                            (binio:encode-uvarint ,size ,bufsym ,startsym))
-                      (replace ,bufsym ,strbuf :start1 ,startsym)
-                      ,size)))
-                (otherwise ;; pack object
-                 (if (enum-type-p type)
-                     `(binio:encode-uvarint (,(symcat type 'code) ,valsym)
-                                            ,bufsym ,startsym)
-                     `(pb::pack-embedded ,valsym ,bufsym ,startsym))))))
+  `(protoc::pack-slot ,startsym ,bufsym ,valsym ,type))
+
+;; (defun gen-pack1 (bufsym startsym valsym type)
+;;   `(incf ,startsym
+;;          ,(case type
+;;                 ((:int32 :uint32 :uint64 :int64 :enum)
+;;                  `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
+;;                 (:bool
+;;                  `(pb::encode-bool ,valsym 
+;;                                    ,bufsym 
+;;                                    ,startsym))
+;;                 ((:sint32 :sint64)
+;;                  `(binio:encode-svarint ,valsym ,bufsym ,startsym))
+;;                 ((:fixed32 :sfixed32)
+;;                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 32))
+;;                 ((:fixed64 :sfixed64)
+;;                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 64))
+;;                 ((:double)
+;;                  `(binio:encode-double-float
+;;                    ,valsym :little ,bufsym ,startsym))
+;;                 (:string
+;;                  (let ((strbuf (gensym))
+;;                        (size (gensym)))
+;;                    `(multiple-value-bind (,size ,strbuf)
+;;                         (binio:encode-utf8 ,valsym)
+;;                       (incf ,startsym 
+;;                             (binio:encode-uvarint ,size ,bufsym ,startsym))
+;;                       (replace ,bufsym ,strbuf :start1 ,startsym)
+;;                       ,size)))
+;;                 (otherwise ;; pack object
+;;                  (if (enum-type-p type)
+;;                      `(binio:encode-uvarint (,(symcat type 'code) ,valsym)
+;;                                             ,bufsym ,startsym)
+;;                      `(pb::pack-embedded ,valsym ,bufsym ,startsym))))))
 
 
 (defun gen-start-code-size (type pos)
@@ -289,7 +329,7 @@
          ;`(pb::packed-uvarint-size ,slot))
         ;(t `(pb::packed-size ,slot))
 
-(defun gen-packed-size (type slot &optional pos)
+(defun gen-slot-packed-size (type slot &optional pos)
   (let ((array-size 
          (cond 
            ((fixed64-p type) `(* 8 (length ,slot)))
@@ -317,11 +357,11 @@
                  ((and repeated (not packed))
                   (gen-repeated-size type slot pos))
                  (packed
-                  (gen-packed-size type slot pos)))))
+                  (gen-slot-packed-size type slot pos)))))
        0))
 
   
-(defun def-packed-size (form package)
+(defun gen-packed-size (form package)
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package)))
@@ -377,7 +417,7 @@
                                          ,bufsym ,startsym))
             ;; write length
             ,(gen-pack1 bufsym startsym 
-                        (gen-packed-size type slot) :uint64)
+                        (gen-slot-packed-size type slot) :uint64)
             ;; write elements
             ,(let ((isym (gensym)))
                   `(dotimes (,isym (length ,slot))
@@ -385,7 +425,7 @@
                                  `(aref ,slot ,isym) type))))))))))
          
 
-(defun msg-defpack ( form package)
+(defun gen-pack ( form package)
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package))
@@ -488,7 +528,7 @@
                              ,slot)))
       (t (error "can't handle this type")))))
 
-(defun def-unpack (form package)
+(defun gen-unpack (form package)
   (declare (ignore package))
   (destructuring-bind (message name &rest field-specs) form
     (declare (ignore message))
@@ -582,7 +622,7 @@
 ;;          (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name enum-symbol)))))))
         
   
-(defun msg-def-enums (msg-name specs)
+(defun gen-enums (msg-name specs)
   (mapcan (lambda (spec)
             (when (symbol-string= (car spec) 'enum)
               (gen-enum (symcat (symbol-package msg-name) 
@@ -590,7 +630,7 @@
                         (cddr spec))))
           specs))
 
-(defun msg-defclass (name field-specs)
+(defun gen-class (name field-specs)
   `((cl:defclass ,name () ())
     (cl:defclass ,name ()
       ;; slots
@@ -631,12 +671,11 @@
 
 (defun gen-msg-defs (name body)
   (let ((form `(message ,name ,@body)))
-    `(
-       ,@(msg-def-enums name body) 
-       ,@(msg-defclass name body)
-       ,(def-packed-size form (symbol-package name))
-       ,(msg-defpack form (symbol-package name))
-       ,(def-unpack form (symbol-package name)))))
+    `( ,@(gen-enums name body)
+       ,@(gen-class name body)
+       ,(gen-packed-size form (symbol-package name))
+       ,(gen-pack form (symbol-package name))
+       ,(gen-unpack form (symbol-package name)))))
 
 (defmacro def-proto-msg (name &body body)
     `(progn

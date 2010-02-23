@@ -48,26 +48,27 @@
 ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
 
 
-(protoc::def-proto-msg test1
-  (field a :int32 1))
+;; (protoc::def-proto-msg test1
+;;   (field a :int32 1))
 
-(protoc::def-proto-msg test2
-  (field b :string 2))
+;; (protoc::def-proto-msg test2
+;;   (field b :string 2))
 
-(protoc::def-proto-msg test3
-  (field c test1 3))
+;; (protoc::def-proto-msg test3
+;;   (field c test1 3))
 
-(protoc::def-proto-msg test4
-  (field d :int32 4 :repeated t :packed nil))
+;; (protoc::def-proto-msg test4
+;;   (field d :int32 4 :repeated t :packed nil))
 
-(protoc::def-proto-msg testx1
-  (field a :sfixed32 1 :repeated t :packed nil))
+;; (protoc::def-proto-msg testx1
+;;   (field a :sfixed32 1 :repeated t :packed nil))
 
 
-(protoc::def-proto-msg testx2
-  (enum e (:a 0) (:b 10) (:c 20))
-  (field a testx2-e 1 :repeated nil :packed nil))
+;; (protoc::def-proto-msg testx2
+;;   (enum e (:a 0) (:b 10) (:c 20))
+;;   (field a testx2-e 1 :repeated nil :packed nil))
 
+(load-proto-set "/home/ntd/src/s-protobuf/tests/test.protobin")
 
 (defun redef () 
   (protoc::def-proto-msg test1
@@ -96,25 +97,25 @@
                  (format nil "~x" elt))
        array))
 
-(defun test-encoding (protobuf expected-count expected-buffer)
+(defun test-encoding (protobuf expected-buffer)
   (multiple-value-bind (count buffer) (pb::pack protobuf)
-    (let ((count= (= count expected-count))
+    (let ((count= (= count (length expected-buffer)))
           (buf=  (equalp buffer expected-buffer)))
+      (assert count=
+              () "Wrong encoded length")
+      (assert buf=
+              () "Bad encoding: ~A" buffer )
       (and count= buf=))))
 
 
 
 (defun test-1 (test-buffer type slot slot-value &key (test #'equalp))
+  (format t "~&Testing type ~A for ~A = ~S~%" type slot slot-value)
   (let ((enc-inst (make-instance type))
         (dec-inst (make-instance type)))
     (setf (slot-value enc-inst slot) slot-value)
     ;; test encoding
-    (multiple-value-bind (length buffer)
-        (pb:pack enc-inst)
-      (assert (= length (length test-buffer) (length buffer))
-              () "Wrong encoded length")
-      (assert (equalp buffer test-buffer) 
-              () "Bad encoding: ~A" buffer ))
+    (test-encoding enc-inst test-buffer)
     ;; test decoding
     (multiple-value-bind (dec-inst* length)
         (pb:unpack test-buffer dec-inst)
@@ -158,12 +159,9 @@
         )
           
 
-  ;; Packing Tests
-  ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
-
-
-    ;(re-def)
-
+    ;; Packing Tests
+    ;; http://code.google.com/apis/protocolbuffers/docs/encoding.html
+    
     ;; test 1 - varint
     (test-1 buffer-1 'test1 'a 150)
     ;; test 2 - string
@@ -192,8 +190,6 @@
                                        (= (aref a 0) (aref b 0))
                                        (= (aref a 1) (aref b 1))))))
     
-  ;(let ((msg (make-instance 'testx2)))
-   ; (setf (slot-value msg 'a) :a)
     (test-1 buffer-x2 'testx2 'a :b)
 
     t))
