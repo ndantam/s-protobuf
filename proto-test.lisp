@@ -70,26 +70,26 @@
 
 (load-proto-set "/home/ntd/src/s-protobuf/tests/test.protobin")
 
-(defun redef () 
-  (protoc::def-proto-msg test1
-    (field a :int32 1))
+;; (defun redef () 
+;;   (protoc::def-proto-msg test1
+;;     (field a :int32 1))
   
-  (protoc::def-proto-msg test2
-    (field b :string 2))
+;;   (protoc::def-proto-msg test2
+;;     (field b :string 2))
 
-  (protoc::def-proto-msg test3
-    (field c test1 3))
+;;   (protoc::def-proto-msg test3
+;;     (field c test1 3))
   
-  (protoc::def-proto-msg test4
-    (field d :int32 4 :repeated t :packed nil))
+;;   (protoc::def-proto-msg test4
+;;     (field d :int32 4 :repeated t :packed nil))
   
-  (protoc::def-proto-msg testx1
-    (field a :sfixed32 1 :repeated t :packed nil))
+;;   (protoc::def-proto-msg testx1
+;;     (field a :sfixed32 1 :repeated t :packed nil))
 
-  (protoc::def-proto-msg testx2
-    (enum e (:a 0) (:b 10) (:c 20))
-    (field a testx2-e 1 :repeated nil :packed nil)) 
-)
+;;   (protoc::def-proto-msg testx2
+;;     (enum e (:a 0) (:b 10) (:c 20))
+;;     (field a testx2-e 1 :repeated nil :packed nil)) 
+;; )
 
 
 (defun oct->hex (array)
@@ -195,9 +195,9 @@
     t))
 
 
-(defun redef-load ()
-  (load-proto-set
-   "/home/ntd/src/s-protobuf/tests/test.protobin"))
+;; (defun redef-load ()
+;;   (load-proto-set
+;;    "/home/ntd/src/s-protobuf/tests/test.protobin"))
 
 
 (defun test-inline ()

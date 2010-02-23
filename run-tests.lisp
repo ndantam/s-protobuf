@@ -3,7 +3,6 @@
 
 (in-package :proto-test)
 
-(redef-load)
 (test)
 
 (sb-ext:quit)
