@@ -101,7 +101,7 @@
 
 (defun varint-p (type)
   (case type
-    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :enum :int32 :uint64)
+    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :uint64 :enum)
      t)
     (otherwise nil )))
 
@@ -535,7 +535,7 @@
     `(defmethod pb:unpack (buffer
                             (protobuf ,name)
                             &optional (start 0) (end (length buffer)))
-       (declare (binio:octet-vector buffer))
+       (declare (type binio:octet-vector buffer))
        (do ((i start))
            ((>= i end) (values protobuf (- i start)))
          (multiple-value-bind (pos typecode startlen)
