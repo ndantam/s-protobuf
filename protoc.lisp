@@ -73,7 +73,7 @@
                         :sint32 :sint64
                         :fixed32 :fixed64
                         :sfixed32 :sfixed64
-                        :bool :string :bytes))
+                        :boolean :bool :string :bytes))
 
 (defun enum-type-p (sym)
   (get sym 'enum))
@@ -101,7 +101,7 @@
 
 (defun varint-p (type)
   (case type
-    ((:bool :int32 :sint32 :uint32 :int64 :sint64 :uint64 :enum)
+    ((:boolean :bool :int32 :sint32 :uint32 :int64 :sint64 :uint64 :enum)
      t)
     (otherwise nil )))
 
@@ -149,6 +149,7 @@
                 ((:int64 :sfixed64 :sint64) '(cl:signed-byte 64))
                 ((:uint64 :fixed64) '(cl:unsigned-byte 64))
                 ((:bool) 'cl:boolean)
+                ((:boolean) 'cl:boolean)
                 (:double 'cl:double-float)
                 (:string 'cl:string)
                 (:float 'cl:single-float)
@@ -189,18 +190,18 @@
               package))
       (intern (pb-str name) ))
 
-(defun declare-message (raw-form &optional (package *package*))
-  (destructuring-bind (message name &rest specs) raw-form
-    (let ((msg-name-sym (pb-sym name package)))
-      (setf (get msg-name-sym *message-plist-sym*)
-            `(,message ,(pb-sym name package)
-                      ,@(loop for spec in specs
-                           collect 
-                             (destructuring-bind (field name type &rest keys)
-                                 spec
-                               `(,field ,(pb-sym name package) 
-                                       ,type ,@keys)))))
-      msg-name-sym)))
+;; (defun declare-message (raw-form &optional (package *package*))
+;;   (destructuring-bind (message name &rest specs) raw-form
+;;     (let ((msg-name-sym (pb-sym name package)))
+;;       (setf (get msg-name-sym *message-plist-sym*)
+;;             `(,message ,(pb-sym name package)
+;;                       ,@(loop for spec in specs
+;;                            collect 
+;;                              (destructuring-bind (field name type &rest keys)
+;;                                  spec
+;;                                `(,field ,(pb-sym name package) 
+;;                                        ,type ,@keys)))))
+;;       msg-name-sym)))
 
 
 (defun symbol-string= (a b)
@@ -215,7 +216,8 @@
     ;(default default)
     ;(repeated (make-array 0 :elment-type
 
-(defmacro pack-slot (start-place buffer slot type)
+(defmacro def-pack-val (start-place buffer slot type)
+  "Generate code to pack a single value into the buffer."
   (let ((buffer-sym (gensym))
         (slot-sym (gensym)))
     `(incf ,start-place
@@ -224,7 +226,7 @@
              ,(case type
                     ((:int32 :uint32 :uint64 :int64 :enum)
                      `(binio:encode-uvarint ,slot-sym ,buffer-sym ,start-place))
-                    (:bool
+                    ((:bool :boolean)
                      `(pb::encode-bool ,slot-sym 
                                        ,buffer-sym 
                                        ,start-place))
@@ -253,7 +255,7 @@
                          `(pb::pack-embedded ,slot-sym ,buffer-sym ,start-place))))))))
            
 (defun gen-pack1 (bufsym startsym valsym type)
-  `(protoc::pack-slot ,startsym ,bufsym ,valsym ,type))
+  `(protoc::def-pack-val ,startsym ,bufsym ,valsym ,type))
 
 ;; (defun gen-pack1 (bufsym startsym valsym type)
 ;;   `(incf ,startsym
@@ -290,14 +292,35 @@
 
 
 (defun gen-start-code-size (type pos)
+  "Find the size of the start code"
   (binio:uvarint-size (make-start-code-sym pos type)))
 
-(defun gen-scalar-size (type slot pos)
+;; (defun gen-scalar-size (type slot pos)
+;;   `(+ ,(gen-start-code-size type pos)
+;;       ,(cond 
+;;         ((fixed64-p type) 8)
+;;         ((fixed32-p type) 4)
+;;         ((eq :bool type) 1)
+;;         ((uvarint-p type)
+;;          `(binio:uvarint-size ,slot))
+;;         ((svarint-p type) 
+;;          `(binio:svarint-size ,slot))
+;;         ((enum-type-p type) 
+;;          `(binio:uvarint-size (,(symcat type 'code) ,slot)))
+;;         ((eq :string type)
+;;          `(pb::length-delim-size (binio:utf8-size ,slot)))
+;;         ((eq :bytes type)
+;;          `(pb::length-delim-size (length ,slot)))
+;;         (t `(pb::length-delim-size (pb::packed-size ,slot))))))
+
+(defmacro def-scalar-size (type slot pos)
+  "Packed size of a scalar field."
   `(+ ,(gen-start-code-size type pos)
       ,(cond 
         ((fixed64-p type) 8)
         ((fixed32-p type) 4)
         ((eq :bool type) 1)
+        ((eq :boolean type) 1)
         ((uvarint-p type)
          `(binio:uvarint-size ,slot))
         ((svarint-p type) 
@@ -310,31 +333,63 @@
          `(pb::length-delim-size (length ,slot)))
         (t `(pb::length-delim-size (pb::packed-size ,slot))))))
 
-(defun gen-repeated-size (type slot pos)
-  (cond 
-    ((fixed-p type) 
-     `(* (length ,slot)
-         (+ ,(gen-start-code-size type pos) 
-            ,(fixed-size type))))
-    (t 
-     (let ((i (gensym))
-           (accum (gensym)))
-       `(let ((,accum 0))
-          (dotimes (,i (length ,slot))
-            (incf ,accum 
-                  ,(gen-scalar-size type `(aref ,slot ,i) pos)))
-          ,accum)))))
 
-        ;((pb::svarint-p type) 
-         ;`(pb::packed-uvarint-size ,slot))
-        ;(t `(pb::packed-size ,slot))
+;; (defun gen-repeated-size (type slot pos)
+;;   (cond 
+;;     ((fixed-p type) 
+;;      `(* (length ,slot)
+;;          (+ ,(gen-start-code-size type pos) 
+;;             ,(fixed-size type))))
+;;     (t 
+;;      (let ((i (gensym))
+;;            (accum (gensym)))
+;;        `(let ((,accum 0))
+;;           (dotimes (,i (length ,slot))
+;;             (incf ,accum 
+;;                   (def-scalar-size ,type (aref ,slot ,i) ,pos)))
+;;           ,accum)))))
 
-(defun gen-slot-packed-size (type slot &optional pos)
+(defmacro def-repeated-size (type slot pos)
+  "Packed size of a repeated field."
+  (if (fixed-p type) 
+      `(* (length ,slot)
+          (+ ,(gen-start-code-size type pos) 
+             ,(fixed-size type)))
+      (let ((i (gensym))
+            (accum (gensym)))
+        `(let ((,accum 0))
+           (dotimes (,i (length ,slot))
+             (incf ,accum 
+                   (def-scalar-size ,type (aref ,slot ,i) ,pos)))
+           ,accum))))
+
+
+;; (defun gen-slot-packed-size (type slot &optional pos)
+;;   (let ((array-size 
+;;          (cond 
+;;            ((fixed64-p type) `(* 8 (length ,slot)))
+;;            ((fixed32-p type) `(* 4 (length ,slot)))
+;;            ((eq :bool type) `(length ,slot))
+;;            ((uvarint-p type) 
+;;             `(pb::packed-uvarint-size ,slot))
+;;            ((svarint-p type) 
+;;             `(pb::packed-uvarint-size ,slot))
+;;            ((enum-type-p type) 
+;;             `(pb::packed-enum-size #',(symcat type 'code) ,slot))
+;;            (t (error "Can't pack this type")))))
+;;     (if pos
+;;         `(+ ,(gen-start-code-size :bytes pos) 
+;;             (pb::length-delim-size ,array-size))
+;;         array-size)))
+
+(defmacro def-repeated-packed-size (type slot &optional pos)
+  "Packed size of a repeated packed field."
   (let ((array-size 
          (cond 
            ((fixed64-p type) `(* 8 (length ,slot)))
            ((fixed32-p type) `(* 4 (length ,slot)))
            ((eq :bool type) `(length ,slot))
+           ((eq :boolean type) 1)
            ((uvarint-p type) 
             `(pb::packed-uvarint-size ,slot))
            ((svarint-p type) 
@@ -347,21 +402,37 @@
             (pb::length-delim-size ,array-size))
         array-size)))
 
-(defun gen-slot-size (type objsym slot-name pos packed repeated)
-  `(if (slot-boundp ,objsym ',slot-name)
-       (progn 
-         ,(let ((slot `(slot-value ,objsym ',slot-name)))
-               (cond
-                 ((and (not repeated) (not packed))
-                  (gen-scalar-size type slot pos))
-                 ((and repeated (not packed))
-                  (gen-repeated-size type slot pos))
-                 (packed
-                  (gen-slot-packed-size type slot pos)))))
-       0))
 
+;; (defun gen-slot-size (type objsym slot-name pos packed repeated)
+;;   `(if (slot-boundp ,objsym ',slot-name)
+;;        (progn 
+;;          ,(let ((slot `(slot-value ,objsym ',slot-name)))
+;;                (cond
+;;                  ((and (not repeated) (not packed))
+;;                   `(def-scalar-size ,type ,slot ,pos))
+;;                  ((and repeated (not packed))
+;;                   `(def-repeated-size ,type ,slot ,pos))
+;;                  (packed
+;;                   `(def-repeated-packed-size ,type ,slot ,pos)))))
+;;        0))
+  
+(defmacro def-slot-size (type object slot-name pos packed repeated)
+  "Generate code to find the packed size of a single slot."
+  (let* ((objsym (gensym))
+         (slot  `(slot-value ,objsym ',slot-name)))
+    `(let ((,objsym ,object))
+       (if (slot-boundp ,objsym ',slot-name)
+           ,(cond
+             ((and (not repeated) (not packed))
+              `(def-scalar-size ,type ,slot ,pos))
+             ((and repeated (not packed))
+              `(def-repeated-size ,type ,slot ,pos))
+             (packed
+              `(def-repeated-packed-size ,type ,slot ,pos)))
+           0))))
   
 (defun gen-packed-size (form package)
+  "Generate code for the PACKED-SIZE defmethod."
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package)))
@@ -377,13 +448,14 @@
                                                      (packed nil))
                               field-spec
                             (declare (ignore field default required optional))
-                            (list (gen-slot-size type protobuf  name position 
-                                                 packed repeated))
+                            (list `(def-slot-size ,type ,protobuf  ,name ,position 
+                                                  ,packed ,repeated))
                             )))
                       field-specs))))))
  
          
 (defun gen-pack-slot (bufsym startsym objsym name pos type repeated packed)
+  "Generate code to pack a single slot."
   (let ((slot `(slot-value ,objsym ',name)))
     `((when (slot-boundp ,objsym ',name)
       ,@(cond 
@@ -417,7 +489,7 @@
                                          ,bufsym ,startsym))
             ;; write length
             ,(gen-pack1 bufsym startsym 
-                        (gen-slot-packed-size type slot) :uint64)
+                        `(def-repeated-packed-size ,type ,slot) :uint64)
             ;; write elements
             ,(let ((isym (gensym)))
                   `(dotimes (,isym (length ,slot))
@@ -425,7 +497,8 @@
                                  `(aref ,slot ,isym) type))))))))))
          
 
-(defun gen-pack ( form package)
+(defun gen-pack (form package)
+  "Generate code for the PACK defmethod."
   (destructuring-bind (message name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
     (let ((protobuf (pb-sym 'protobuf package))
@@ -437,6 +510,8 @@
                            (,buffer (binio:make-octet-vector 
                                      (pb:packed-size ,protobuf)))
                            (,start 0))
+         (declare (type binio:octet-vector ,buffer)
+                  (fixnum ,start))
          (let ((,i ,start))
            ,@(mapcan (lambda (field-spec)
                        (when (symbol-string= (car field-spec) "FIELD")
@@ -456,6 +531,7 @@
            (values (- ,i ,start) ,buffer))))))
 
 (defun get-decoder-name (protobuf-type)
+  "Find the function symbol to decode this type."
   (case protobuf-type
     ((:int32 :uint32 :int64 :uint64 :enum)
      'binio:decode-uvarint)
@@ -473,34 +549,42 @@
      'pb::decode-string)
     (:double
      'pb::decode-double)
-    (:bool
+    ((:bool :boolean)
      'pb::decode-bool)
     (otherwise 
      (if (enum-type-p protobuf-type)
          (symcat protobuf-type 'decode)
-         (error "Can't handle this type: ~A" protobuf-type)))))
+         (error "Can't find decoder for this type: ~A" protobuf-type)))))
 
-(defun gen-unpack1 (bufsym startsym type placesym)
-      `(pb::with-decoding (value length)
-           ,(cond 
-             ((primitive-type-p type)
-              `(,(get-decoder-name type)
-                 ,bufsym ,startsym))
-             (t `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym)))
-         (incf ,startsym length)
-         value))
+;; (defun gen-unpack1 (bufsym startsym type placesym)
+;;       `(pb::with-decoding (value length)
+;;            ,(cond 
+;;              ((primitive-type-p type)
+;;               `(,(get-decoder-name type)
+;;                  ,bufsym ,startsym))
+;;              (t `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym)))
+;;          (incf ,startsym length)
+;;          value))
+
+(defmacro do-unpack-scalar (start-place buffer type &optional instance)
+  "Unpack a scalar value."
+  `(pb::with-decoding (value length)
+       ,(if (primitive-type-p type)
+            `(,(get-decoder-name type) ,buffer ,start-place)
+            `(pb::unpack-embedded-protobuf ,buffer ,instance ,start-place))
+     (incf ,start-place length)
+     value))
 
 (defun gen-unpacker (bufsym startsym objsym name type repeated packed)
+  "Generate code to unpack a single slot"
   (let ((slot  `(slot-value ,objsym ',name)))
     (cond 
       ((and (not repeated) (not packed))
-       `(
-         ;(format t "~&unpacking scalar")
-         ,@(unless (primitive-type-p type)
-                   `((unless (slot-boundp ,objsym ',name)
-                       ;(format t "~&making new slot")
-                       (setf ,slot (make-instance ',(lisp-type type))))))
-         (setf ,slot ,(gen-unpack1 bufsym startsym  type slot))))
+       `( ,@(unless (primitive-type-p type)
+                    `((unless (slot-boundp ,objsym ',name)
+                        (setf ,slot (make-instance ',(lisp-type type))))))
+            (setf ,slot 
+                  (do-unpack-scalar ,startsym ,bufsym ,type ,slot))))
       ((and repeated packed)
        `((pb::with-decoding (value length)
              (pb::decode-length-delim ,bufsym ,startsym 
@@ -522,71 +606,93 @@
                  (make-array 0 :element-type ',(lisp-type type) 
                              :fill-pointer t
                              :adjustable t)))
-         (vector-push-extend ,(gen-unpack1 bufsym startsym type
-                                           (if (primitive-type-p type) nil
-                                               `(make-instance ',type)))
+         (vector-push-extend 
+          (do-unpack-scalar ,startsym ,bufsym ,type 
+                            ,(when (not (primitive-type-p type))
+                                   `(make-instance ',type)))
                              ,slot)))
-      (t (error "can't handle this type")))))
+      (t (error "Can't make unpacker for this type ~A, repeated: ~A, packed: ~A" 
+                type repeated packed)))))
 
 (defun gen-unpack (form package)
+  "Generate code for the UNPACK method"
   (declare (ignore package))
   (destructuring-bind (message name &rest field-specs) form
     (declare (ignore message))
-    `(defmethod pb:unpack (buffer
-                            (protobuf ,name)
-                            &optional (start 0) (end (length buffer)))
-       (declare (type binio:octet-vector buffer))
-       (do ((i start))
-           ((>= i end) (values protobuf (- i start)))
-         (multiple-value-bind (pos typecode startlen)
-             (pb::read-start-code buffer i)
-           (incf i startlen)
-           (case pos
-             ,@(mapcan (lambda (field-spec)
-                        (when (symbol-string= (car field-spec) "FIELD")
-                          (destructuring-bind (field name type position 
-                                                     &key 
-                                                     (default nil)
-                                                     (required nil)
-                                                     (repeated nil)
-                                                     (packed nil)
-                                                     (optional nil))
-                              field-spec
-                            (declare (ignore field default required optional))
-                            (let ((desired-typecode (wire-typecode type repeated packed)))
-                              `((,position 
-                                 (assert 
-                                  (= typecode 
-                                     ,desired-typecode) ()
+    (let ((buffer (gensym))
+          (protobuf (gensym))
+          (start (gensym))
+          (end (gensym))
+          (i (gensym))
+          (pos (gensym))
+          (typecode (gensym))
+          (startlen (gensym)))
+      `(defmethod pb:unpack (,buffer
+                             (,protobuf ,name)
+                             &optional (,start 0) (,end (length ,buffer)))
+         (declare (type binio:octet-vector ,buffer)
+                  (fixnum ,start ,end))
+         ;; loop through buffer until we at the end
+         ;; each decoded field will INCF i by its length
+         (do ((,i ,start))
+             ((>= ,i ,end) (values ,protobuf (- ,i ,start)))
+           (multiple-value-bind (,pos ,typecode ,startlen)
+               (pb::read-start-code ,buffer ,i)
+             (incf ,i ,startlen)
+             ;; current working with a simple case statement,
+             ;; perhaps I could do something more efficient...
+             (case ,pos
+               ,@(mapcan (lambda (field-spec)
+                           (when (symbol-string= (car field-spec) "FIELD")
+                             (destructuring-bind (field name type position 
+                                                        &key 
+                                                        (default nil)
+                                                        (required nil)
+                                                        (repeated nil)
+                                                        (packed nil)
+                                                        (optional nil))
+                                 field-spec
+                               (declare (ignore field default required optional))
+                               (let ((desired-typecode (wire-typecode type repeated packed)))
+                                 `((,position 
+                                    (assert 
+                                     (= ,typecode ,desired-typecode) ()
                                      "Invalid typecode for field ~A. Wanted ~A (~A) but found ~A (~A)." 
                                      (quote ,name) 
                                      ,desired-typecode (pb:typecode-meaning ,desired-typecode)
-                                     typecode (pb:typecode-meaning typecode))
-                                 ,@(gen-unpacker 'buffer 'i 'protobuf name type repeated packed)
-                                 ))))))
-                       field-specs)
-             (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
-                               pos ',name buffer))))))))
+                                     ,typecode (pb:typecode-meaning ,typecode))
+                                    ,@(gen-unpacker buffer i protobuf name type repeated packed)
+                                    ))))))
+                         field-specs)
+               (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
+                                 ,pos ',name ,buffer)))))))))
+
 
 
 (defun gen-init-form (type repeated packed)
+  "Generate the value to set a field to on MAKE-INSTANCE"
   (cond 
     ((and (not repeated) (not packed))
-     (cond ((integer-type-p type)  0)
-           ((eq type :string) nil)
-           ((eq type :bool) nil)
+     ;; Scalar types
+     (cond ((eq type :bool) nil)
+           ((eq type :boolean) nil)
            ((eq type :double) 0d0)
            ((eq type :float) 0s0)
+           ((integer-type-p type)  0)
+           ((eq type :string) nil)
            ((enum-type-p type) nil)
            (t `(make-instance ',type))))
-    ((and repeated packed)
+    ((and repeated packed) 
+     ;; packed array
      nil)
-    ((and repeated (not packed))
+    ((and repeated (not packed)) 
+     ;; not packed array
      `(make-array 0 :element-type ',(lisp-type type) :fill-pointer t :adjustable t))
     (t (error "Cant make init form for packed, nonrepeated elements"))))
           
     
 (defun gen-enum (enum-name enums)
+  "Generate code to map between enum codes and keyword symbols."
   (setf (get enum-name 'enum) t)
   (labels ((map-enums (function enums)
              (mapcar (lambda (e) (funcall function (car e) (cadr e))) enums)))
@@ -631,6 +737,7 @@
           specs))
 
 (defun gen-class (name field-specs)
+  "Generate code for the DEFCLASS."
   `((cl:defclass ,name () ())
     (cl:defclass ,name ()
       ;; slots
@@ -644,29 +751,28 @@
                                               (packed nil)
                                               (optional nil))
                        field-spec
-                     (declare (ignore position field packed
-                                      default required optional))
+                     (declare (ignore position field default required optional))
                      `((,field-name 
                         :type ,(lisp-type type repeated)
-                        ;:initform ,(gen-init-form type repeated packed)
+                        :initform ,(gen-init-form type repeated packed)
                         )))))
                field-specs))))
 
 
 
-(defun load-proto-se (path &optional (package (find-package :cl-user)))
-  (with-open-file (stream path)
-    (loop 
-       for form = (read stream nil)
-       until (null form)
-       do
-         (format t "~S~%" form)
-       collect
-         (cond 
-           ((symbol-string= (car form) "MESSAGE")
-            (format t "Declareing: ~&~S~%" form)
-            (declare-message form package))
-           (t (error "Unknown form in proto file: ~A" (car form)))))))
+;; (defun load-proto-se (path &optional (package (find-package :cl-user)))
+;;   (with-open-file (stream path)
+;;     (loop 
+;;        for form = (read stream nil)
+;;        until (null form)
+;;        do
+;;          (format t "~S~%" form)
+;;        collect
+;;          (cond 
+;;            ((symbol-string= (car form) "MESSAGE")
+;;             (format t "Declareing: ~&~S~%" form)
+;;             (declare-message form package))
+;;            (t (error "Unknown form in proto file: ~A" (car form)))))))
 
 
 (defun gen-msg-defs (name body)

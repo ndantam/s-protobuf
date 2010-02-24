@@ -188,7 +188,10 @@
                        (and 
                         (slot-boundp options 'packed)
                         (slot-value options 'packed))))
-                '(:packed t))))
+                (progn
+                  (assert  (eq (slot-value object 'label) :label-repeated) ()
+                           "Can't have packed, nonrepeated field")
+                  '(:packed t)))))
 
 ;; enum
 (defmethod sanitize ((object enum-descriptor-proto) &key parent package)

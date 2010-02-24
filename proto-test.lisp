@@ -200,10 +200,10 @@
 ;;    "/home/ntd/src/s-protobuf/tests/test.protobin"))
 
 
-(defun test-inline ()
-  (redef)
-  (test))
+;; (defun test-inline ()
+;;   (redef)
+;;   (test))
 
-(defun test-load ()
-  (redef-load)
-  (test))
+;; (defun test-load ()
+;;   (redef-load)
+;;   (test))
