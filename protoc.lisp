@@ -190,6 +190,38 @@
               package))
       (intern (pb-str name) ))
 
+
+(defmacro with-gensyms ( (&rest symbols) &body body )
+  `(let ,(mapcar (lambda (sym)
+                   `(,sym (gensym)))
+                 symbols)
+     ,@body))
+
+
+(defun map-fields (function specs)
+  (mapcan (lambda (field-spec)
+            (when (symbol-string= (car field-spec) "FIELD")
+              (destructuring-bind (field name type position 
+                                         &key 
+                                         (default nil)
+                                         (required nil)
+                                         (repeated nil)
+                                         (optional nil)
+                                         (packed nil))
+                  field-spec
+                (declare (ignore field))
+                (list (funcall function 
+                               :name name 
+                               :type type
+                               :position position
+                               :default default
+                               :repeated repeated
+                               :required required
+                               :optional optional
+                               :packed packed )))))
+          specs))
+               
+
 ;; (defun declare-message (raw-form &optional (package *package*))
 ;;   (destructuring-bind (message name &rest specs) raw-form
 ;;     (let ((msg-name-sym (pb-sym name package)))
@@ -218,8 +250,7 @@
 
 (defmacro def-pack-val (start-place buffer slot type)
   "Generate code to pack a single value into the buffer."
-  (let ((buffer-sym (gensym))
-        (slot-sym (gensym)))
+  (with-gensyms (buffer-sym slot-sym)
     `(incf ,start-place
            (let ((,buffer-sym ,buffer)
                  (,slot-sym ,slot))
@@ -240,8 +271,7 @@
                      `(binio:encode-double-float
                        ,slot-sym :little ,buffer-sym ,start-place))
                     (:string
-                     (let ((strbuf (gensym))
-                           (size (gensym)))
+                     (with-gensyms (strbuf size)
                        `(multiple-value-bind (,size ,strbuf)
                             (binio:encode-utf8 ,slot-sym)
                           (incf ,start-place 
@@ -355,8 +385,7 @@
       `(* (length ,slot)
           (+ ,(gen-start-code-size type pos) 
              ,(fixed-size type)))
-      (let ((i (gensym))
-            (accum (gensym)))
+      (with-gensyms (i accum)
         `(let ((,accum 0))
            (dotimes (,i (length ,slot))
              (incf ,accum 
@@ -433,31 +462,40 @@
   
 (defun gen-packed-size (form package)
   "Generate code for the PACKED-SIZE defmethod."
-  (destructuring-bind (message name &rest field-specs) form
+  (declare (ignore package))
+  (destructuring-bind (message msg-name &rest field-specs) form
     (assert (symbol-string= message 'message) () "Not a message form")
-    (let ((protobuf (pb-sym 'protobuf package)))
-      `(defmethod pb:packed-size ((,protobuf ,name))
-         (+ ,@(mapcan (lambda (field-spec)
-                        (when (symbol-string= (car field-spec) "FIELD")
-                          (destructuring-bind (field name type position 
-                                                     &key 
-                                                     (default nil)
-                                                     (required nil)
-                                                     (repeated nil)
-                                                     (optional nil)
-                                                     (packed nil))
-                              field-spec
-                            (declare (ignore field default required optional))
-                            (list `(def-slot-size ,type ,protobuf  ,name ,position 
-                                                  ,packed ,repeated))
-                            )))
-                      field-specs))))))
+    (with-gensyms (protobuf)
+      `(defmethod pb:packed-size ((,protobuf ,msg-name))
+         (+ ,@(map-fields (lambda (&key type name position packed repeated
+                              &allow-other-keys)
+                            `(def-slot-size ,type ,protobuf ,name 
+                                            ,position ,packed ,repeated))
+                          field-specs)
+          
+          ;; ,@(mapcan (lambda (field-spec)
+          ;;               (when (symbol-string= (car field-spec) "FIELD")
+          ;;                 (destructuring-bind (field name type position 
+          ;;                                            &key 
+          ;;                                            (default nil)
+          ;;                                            (required nil)
+          ;;                                            (repeated nil)
+          ;;                                            (optional nil)
+          ;;                                            (packed nil))
+          ;;                     field-spec
+          ;;                   (declare (ignore field default required optional))
+          ;;                   (list `(def-slot-size ,type ,protobuf ,name 
+          ;;                                         ,position ,packed ,repeated))
+          ;;                   )))
+          ;;             field-specs)
+
+            )))))
  
          
 (defun gen-pack-slot (bufsym startsym objsym name pos type repeated packed)
   "Generate code to pack a single slot."
   (let ((slot `(slot-value ,objsym ',name)))
-    `((when (slot-boundp ,objsym ',name)
+    `(when (slot-boundp ,objsym ',name)
       ,@(cond 
          ;; scalar value
          ((null repeated)
@@ -494,7 +532,7 @@
             ,(let ((isym (gensym)))
                   `(dotimes (,isym (length ,slot))
                      ,(gen-pack1 bufsym startsym 
-                                 `(aref ,slot ,isym) type))))))))))
+                                 `(aref ,slot ,isym) type)))))))))
          
 
 (defun gen-pack (form package)
@@ -513,21 +551,27 @@
          (declare (type binio:octet-vector ,buffer)
                   (fixnum ,start))
          (let ((,i ,start))
-           ,@(mapcan (lambda (field-spec)
-                       (when (symbol-string= (car field-spec) "FIELD")
-                         (destructuring-bind (field name type position 
-                                                    &key 
-                                                    (default nil)
-                                                    (required nil)
-                                                    (repeated nil)
-                                                    (optional nil)
-                                                    (packed nil))
-                             field-spec
-                           (declare (ignore field default required optional))
+           ,@(map-fields (lambda (&key name position type repeated packed 
+                             &allow-other-keys)
                            (gen-pack-slot buffer i protobuf 
-                                          name position type repeated packed)
-                           )))
-                        field-specs)
+                                          name position type repeated packed))
+                         field-specs)
+           ;; ,@(mapcan (lambda (field-spec)
+           ;;             (when (symbol-string= (car field-spec) "FIELD")
+           ;;               (destructuring-bind (field name type position 
+           ;;                                          &key 
+           ;;                                          (default nil)
+           ;;                                          (required nil)
+           ;;                                          (repeated nil)
+           ;;                                          (optional nil)
+           ;;                                          (packed nil))
+           ;;                   field-spec
+           ;;                 (declare (ignore field default required optional))
+           ;;                 (gen-pack-slot buffer i protobuf 
+           ;;                                name position type repeated packed)
+           ;;                 )))
+           ;;              field-specs)
+
            (values (- ,i ,start) ,buffer))))))
 
 (defun get-decoder-name (protobuf-type)
@@ -619,14 +663,7 @@
   (declare (ignore package))
   (destructuring-bind (message name &rest field-specs) form
     (declare (ignore message))
-    (let ((buffer (gensym))
-          (protobuf (gensym))
-          (start (gensym))
-          (end (gensym))
-          (i (gensym))
-          (pos (gensym))
-          (typecode (gensym))
-          (startlen (gensym)))
+    (with-gensyms (buffer protobuf start end i pos typecode startlen)
       `(defmethod pb:unpack (,buffer
                              (,protobuf ,name)
                              &optional (,start 0) (,end (length ,buffer)))
@@ -642,19 +679,10 @@
              ;; current working with a simple case statement,
              ;; perhaps I could do something more efficient...
              (case ,pos
-               ,@(mapcan (lambda (field-spec)
-                           (when (symbol-string= (car field-spec) "FIELD")
-                             (destructuring-bind (field name type position 
-                                                        &key 
-                                                        (default nil)
-                                                        (required nil)
-                                                        (repeated nil)
-                                                        (packed nil)
-                                                        (optional nil))
-                                 field-spec
-                               (declare (ignore field default required optional))
+               ,@(map-fields (lambda (&key type name repeated packed position
+                                 &allow-other-keys)
                                (let ((desired-typecode (wire-typecode type repeated packed)))
-                                 `((,position 
+                                 `(,position 
                                     (assert 
                                      (= ,typecode ,desired-typecode) ()
                                      "Invalid typecode for field ~A. Wanted ~A (~A) but found ~A (~A)." 
@@ -662,8 +690,32 @@
                                      ,desired-typecode (pb:typecode-meaning ,desired-typecode)
                                      ,typecode (pb:typecode-meaning ,typecode))
                                     ,@(gen-unpacker buffer i protobuf name type repeated packed)
-                                    ))))))
-                         field-specs)
+                                    )))
+                             field-specs)
+                               
+               ;; ,@(mapcan (lambda (field-spec)
+               ;;             (when (symbol-string= (car field-spec) "FIELD")
+               ;;               (destructuring-bind (field name type position 
+               ;;                                          &key 
+               ;;                                          (default nil)
+               ;;                                          (required nil)
+               ;;                                          (repeated nil)
+               ;;                                          (packed nil)
+               ;;                                          (optional nil))
+               ;;                   field-spec
+               ;;                 (declare (ignore field default required optional))
+               ;;                 (let ((desired-typecode (wire-typecode type repeated packed)))
+               ;;                   `((,position 
+               ;;                      (assert 
+               ;;                       (= ,typecode ,desired-typecode) ()
+               ;;                       "Invalid typecode for field ~A. Wanted ~A (~A) but found ~A (~A)." 
+               ;;                       (quote ,name) 
+               ;;                       ,desired-typecode (pb:typecode-meaning ,desired-typecode)
+               ;;                       ,typecode (pb:typecode-meaning ,typecode))
+               ;;                      ,@(gen-unpacker buffer i protobuf name type repeated packed)
+               ;;                      ))))))
+               ;;           field-specs)
+
                (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
                                  ,pos ',name ,buffer)))))))))
 
@@ -696,25 +748,20 @@
   (setf (get enum-name 'enum) t)
   (labels ((map-enums (function enums)
              (mapcar (lambda (e) (funcall function (car e) (cadr e))) enums)))
-    (let ((sym (gensym))
-          (code (gensym))
-          (buffer (gensym))
-          (start (gensym))
-          (value (gensym))
-          (length (gensym))
-          (enum-symbol (symcat enum-name 'symbol)))
-      `((defun ,enum-symbol (,code)
-          (case ,code
-            ,@(map-enums (lambda (symbol code) `(,code ,symbol)) enums)
-            (otherwise (error "Unknown enum ~A code: ~A" ',enum-name ,code))))
-        (defun ,(symcat enum-name 'code) (,sym)
-          (case ,sym
-            ,@(map-enums (lambda (symbol code) `(,symbol ,code)) enums)
-            (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name ,sym))))
-        (defun ,(symcat enum-name 'decode) (,buffer ,start)
+    (with-gensyms (sym code buffer start value length)
+      (let ((enum-symbol (symcat enum-name 'symbol)))
+        `((defun ,enum-symbol (,code)
+            (case ,code
+              ,@(map-enums (lambda (symbol code) `(,code ,symbol)) enums)
+              (otherwise (error "Unknown enum ~A code: ~A" ',enum-name ,code))))
+          (defun ,(symcat enum-name 'code) (,sym)
+            (case ,sym
+              ,@(map-enums (lambda (symbol code) `(,symbol ,code)) enums)
+              (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name ,sym))))
+          (defun ,(symcat enum-name 'decode) (,buffer ,start)
             (pb::with-decoding (,value ,length)
                 (binio:decode-uvarint ,buffer ,start)
-              (values (,enum-symbol ,value) ,length)))))))
+              (values (,enum-symbol ,value) ,length))))))))
         
  
 
@@ -736,27 +783,34 @@
                         (cddr spec))))
           specs))
 
-(defun gen-class (name field-specs)
+(defun gen-class (class-name field-specs)
   "Generate code for the DEFCLASS."
-  `((cl:defclass ,name () ())
-    (cl:defclass ,name ()
+  `((cl:defclass ,class-name () ())
+    (cl:defclass ,class-name ()
       ;; slots
-      ,(mapcan (lambda (field-spec)
-                 (when (symbol-string= (car field-spec) "FIELD")
-                   (destructuring-bind (field field-name type position 
-                                              &key 
-                                              (default nil)
-                                              (required nil)
-                                              (repeated nil)
-                                              (packed nil)
-                                              (optional nil))
-                       field-spec
-                     (declare (ignore position field default required optional))
-                     `((,field-name 
-                        :type ,(lisp-type type repeated)
-                        :initform ,(gen-init-form type repeated packed)
-                        )))))
-               field-specs))))
+      ,(map-fields (lambda (&key name type repeated packed
+                       &allow-other-keys)
+                     `(,name 
+                       :type ,(lisp-type type repeated)
+                       :initform ,(gen-init-form type repeated packed)
+                       ))
+                   field-specs))))
+      ;; ,(mapcan (lambda (field-spec)
+      ;;            (when (symbol-string= (car field-spec) "FIELD")
+      ;;              (destructuring-bind (field field-name type position 
+      ;;                                         &key 
+      ;;                                         (default nil)
+      ;;                                         (required nil)
+      ;;                                         (repeated nil)
+      ;;                                         (packed nil)
+      ;;                                         (optional nil))
+      ;;                  field-spec
+      ;;                (declare (ignore position field default required optional))
+      ;;                `((,field-name 
+      ;;                   :type ,(lisp-type type repeated)
+      ;;                   :initform ,(gen-init-form type repeated packed)
+      ;;                   )))))
+      ;;          field-specs))))
 
 
 
