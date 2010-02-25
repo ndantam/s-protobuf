@@ -334,9 +334,6 @@
                                                 ,buffer-sym ,start-place)
                          `(pb::pack-embedded ,slot-sym ,buffer-sym ,start-place))))))))
            
-(defun gen-pack1 (bufsym startsym valsym type)
-  `(protoc::def-pack-val ,startsym ,bufsym ,valsym ,type))
-
 (defun gen-pack-slot (bufsym startsym objsym name type pos &key 
                       repeated packed &allow-other-keys)
   "Generate code to pack a single slot."
@@ -352,7 +349,7 @@
                                          ,bufsym ,startsym))
 
             ;; write data code
-            ,(gen-pack1 bufsym startsym slot type)))
+            (def-pack-val ,startsym ,bufsym ,slot ,type)))
          ;; repeated unpacked value
          ((and repeated (not packed))
           (let ((countsym (gensym)))
@@ -363,7 +360,8 @@
                                              ,(wire-typecode type)
                                              ,bufsym ,startsym))
                 ;; write element
-                ,(gen-pack1 bufsym startsym  `(aref ,slot ,countsym) type)))))
+
+                (def-pack-val ,startsym ,bufsym (aref ,slot ,countsym) ,type)))))
          ;; repeated value
          ((and repeated packed)
           `( ;; write start code
@@ -372,14 +370,12 @@
                                          ,(wire-typecode :bytes)
                                          ,bufsym ,startsym))
             ;; write length
-            ,(gen-pack1 bufsym startsym 
-                        `(def-repeated-packed-size ,type ,slot) :uint64)
+            (def-pack-val ,startsym ,bufsym (def-repeated-packed-size ,type ,slot) :uint64)
             ;; write elements
             ,(let ((isym (gensym)))
                   `(dotimes (,isym (length ,slot))
-                     ,(gen-pack1 bufsym startsym 
-                                 `(aref ,slot ,isym) type)))))))))
-         
+                     (def-pack-val ,startsym ,bufsym (aref ,slot ,isym) ,type)))))))))
+
 (defun gen-pack (name specs)
   "Generate code for the PACK defmethod."
   (with-gensyms (protobuf buffer start i)
@@ -598,6 +594,7 @@
 ;;;;;;;;;;;;;;;;;;;;
 
 (defun gen-msg-defs (name specs)
+  "Generate all definitions for one message type"
   `(,@(gen-internal-enums name specs)
       ,@(gen-class name specs)
       ,(gen-packed-size name specs)
