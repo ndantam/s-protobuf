@@ -220,20 +220,6 @@
                                :optional optional
                                :packed packed )))))
           specs))
-               
-
-;; (defun declare-message (raw-form &optional (package *package*))
-;;   (destructuring-bind (message name &rest specs) raw-form
-;;     (let ((msg-name-sym (pb-sym name package)))
-;;       (setf (get msg-name-sym *message-plist-sym*)
-;;             `(,message ,(pb-sym name package)
-;;                       ,@(loop for spec in specs
-;;                            collect 
-;;                              (destructuring-bind (field name type &rest keys)
-;;                                  spec
-;;                                `(,field ,(pb-sym name package) 
-;;                                        ,type ,@keys)))))
-;;       msg-name-sym)))
 
 
 (defun symbol-string= (a b)
@@ -242,11 +228,6 @@
 
 (defun make-start-code-sym (slot-position type)
   (pb::make-start-code slot-position (wire-typecode type)))
-
-;(defun slot-default-value (type repeated default)
-  ;(cond
-    ;(default default)
-    ;(repeated (make-array 0 :elment-type
 
 (defmacro def-pack-val (start-place buffer slot type)
   "Generate code to pack a single value into the buffer."
@@ -287,61 +268,9 @@
 (defun gen-pack1 (bufsym startsym valsym type)
   `(protoc::def-pack-val ,startsym ,bufsym ,valsym ,type))
 
-;; (defun gen-pack1 (bufsym startsym valsym type)
-;;   `(incf ,startsym
-;;          ,(case type
-;;                 ((:int32 :uint32 :uint64 :int64 :enum)
-;;                  `(binio:encode-uvarint ,valsym ,bufsym ,startsym))
-;;                 (:bool
-;;                  `(pb::encode-bool ,valsym 
-;;                                    ,bufsym 
-;;                                    ,startsym))
-;;                 ((:sint32 :sint64)
-;;                  `(binio:encode-svarint ,valsym ,bufsym ,startsym))
-;;                 ((:fixed32 :sfixed32)
-;;                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 32))
-;;                 ((:fixed64 :sfixed64)
-;;                  `(binio:encode-int ,valsym :little ,bufsym ,startsym 64))
-;;                 ((:double)
-;;                  `(binio:encode-double-float
-;;                    ,valsym :little ,bufsym ,startsym))
-;;                 (:string
-;;                  (let ((strbuf (gensym))
-;;                        (size (gensym)))
-;;                    `(multiple-value-bind (,size ,strbuf)
-;;                         (binio:encode-utf8 ,valsym)
-;;                       (incf ,startsym 
-;;                             (binio:encode-uvarint ,size ,bufsym ,startsym))
-;;                       (replace ,bufsym ,strbuf :start1 ,startsym)
-;;                       ,size)))
-;;                 (otherwise ;; pack object
-;;                  (if (enum-type-p type)
-;;                      `(binio:encode-uvarint (,(symcat type 'code) ,valsym)
-;;                                             ,bufsym ,startsym)
-;;                      `(pb::pack-embedded ,valsym ,bufsym ,startsym))))))
-
-
 (defun gen-start-code-size (type pos)
   "Find the size of the start code"
   (binio:uvarint-size (make-start-code-sym pos type)))
-
-;; (defun gen-scalar-size (type slot pos)
-;;   `(+ ,(gen-start-code-size type pos)
-;;       ,(cond 
-;;         ((fixed64-p type) 8)
-;;         ((fixed32-p type) 4)
-;;         ((eq :bool type) 1)
-;;         ((uvarint-p type)
-;;          `(binio:uvarint-size ,slot))
-;;         ((svarint-p type) 
-;;          `(binio:svarint-size ,slot))
-;;         ((enum-type-p type) 
-;;          `(binio:uvarint-size (,(symcat type 'code) ,slot)))
-;;         ((eq :string type)
-;;          `(pb::length-delim-size (binio:utf8-size ,slot)))
-;;         ((eq :bytes type)
-;;          `(pb::length-delim-size (length ,slot)))
-;;         (t `(pb::length-delim-size (pb::packed-size ,slot))))))
 
 (defmacro def-scalar-size (type slot pos)
   "Packed size of a scalar field."
@@ -364,21 +293,6 @@
         (t `(pb::length-delim-size (pb::packed-size ,slot))))))
 
 
-;; (defun gen-repeated-size (type slot pos)
-;;   (cond 
-;;     ((fixed-p type) 
-;;      `(* (length ,slot)
-;;          (+ ,(gen-start-code-size type pos) 
-;;             ,(fixed-size type))))
-;;     (t 
-;;      (let ((i (gensym))
-;;            (accum (gensym)))
-;;        `(let ((,accum 0))
-;;           (dotimes (,i (length ,slot))
-;;             (incf ,accum 
-;;                   (def-scalar-size ,type (aref ,slot ,i) ,pos)))
-;;           ,accum)))))
-
 (defmacro def-repeated-size (type slot pos)
   "Packed size of a repeated field."
   (if (fixed-p type) 
@@ -392,24 +306,6 @@
                    (def-scalar-size ,type (aref ,slot ,i) ,pos)))
            ,accum))))
 
-
-;; (defun gen-slot-packed-size (type slot &optional pos)
-;;   (let ((array-size 
-;;          (cond 
-;;            ((fixed64-p type) `(* 8 (length ,slot)))
-;;            ((fixed32-p type) `(* 4 (length ,slot)))
-;;            ((eq :bool type) `(length ,slot))
-;;            ((uvarint-p type) 
-;;             `(pb::packed-uvarint-size ,slot))
-;;            ((svarint-p type) 
-;;             `(pb::packed-uvarint-size ,slot))
-;;            ((enum-type-p type) 
-;;             `(pb::packed-enum-size #',(symcat type 'code) ,slot))
-;;            (t (error "Can't pack this type")))))
-;;     (if pos
-;;         `(+ ,(gen-start-code-size :bytes pos) 
-;;             (pb::length-delim-size ,array-size))
-;;         array-size)))
 
 (defmacro def-repeated-packed-size (type slot &optional pos)
   "Packed size of a repeated packed field."
@@ -431,19 +327,6 @@
             (pb::length-delim-size ,array-size))
         array-size)))
 
-
-;; (defun gen-slot-size (type objsym slot-name pos packed repeated)
-;;   `(if (slot-boundp ,objsym ',slot-name)
-;;        (progn 
-;;          ,(let ((slot `(slot-value ,objsym ',slot-name)))
-;;                (cond
-;;                  ((and (not repeated) (not packed))
-;;                   `(def-scalar-size ,type ,slot ,pos))
-;;                  ((and repeated (not packed))
-;;                   `(def-repeated-size ,type ,slot ,pos))
-;;                  (packed
-;;                   `(def-repeated-packed-size ,type ,slot ,pos)))))
-;;        0))
   
 (defmacro def-slot-size (type object slot-name pos packed repeated)
   "Generate code to find the packed size of a single slot."
@@ -471,25 +354,7 @@
                               &allow-other-keys)
                             `(def-slot-size ,type ,protobuf ,name 
                                             ,position ,packed ,repeated))
-                          field-specs)
-          
-          ;; ,@(mapcan (lambda (field-spec)
-          ;;               (when (symbol-string= (car field-spec) "FIELD")
-          ;;                 (destructuring-bind (field name type position 
-          ;;                                            &key 
-          ;;                                            (default nil)
-          ;;                                            (required nil)
-          ;;                                            (repeated nil)
-          ;;                                            (optional nil)
-          ;;                                            (packed nil))
-          ;;                     field-spec
-          ;;                   (declare (ignore field default required optional))
-          ;;                   (list `(def-slot-size ,type ,protobuf ,name 
-          ;;                                         ,position ,packed ,repeated))
-          ;;                   )))
-          ;;             field-specs)
-
-            )))))
+                          field-specs))))))
  
          
 (defun gen-pack-slot (bufsym startsym objsym name pos type repeated packed)
@@ -556,22 +421,6 @@
                            (gen-pack-slot buffer i protobuf 
                                           name position type repeated packed))
                          field-specs)
-           ;; ,@(mapcan (lambda (field-spec)
-           ;;             (when (symbol-string= (car field-spec) "FIELD")
-           ;;               (destructuring-bind (field name type position 
-           ;;                                          &key 
-           ;;                                          (default nil)
-           ;;                                          (required nil)
-           ;;                                          (repeated nil)
-           ;;                                          (optional nil)
-           ;;                                          (packed nil))
-           ;;                   field-spec
-           ;;                 (declare (ignore field default required optional))
-           ;;                 (gen-pack-slot buffer i protobuf 
-           ;;                                name position type repeated packed)
-           ;;                 )))
-           ;;              field-specs)
-
            (values (- ,i ,start) ,buffer))))))
 
 (defun get-decoder-name (protobuf-type)
@@ -600,15 +449,6 @@
          (symcat protobuf-type 'decode)
          (error "Can't find decoder for this type: ~A" protobuf-type)))))
 
-;; (defun gen-unpack1 (bufsym startsym type placesym)
-;;       `(pb::with-decoding (value length)
-;;            ,(cond 
-;;              ((primitive-type-p type)
-;;               `(,(get-decoder-name type)
-;;                  ,bufsym ,startsym))
-;;              (t `(pb::unpack-embedded-protobuf ,bufsym ,placesym ,startsym)))
-;;          (incf ,startsym length)
-;;          value))
 
 (defmacro do-unpack-scalar (start-place buffer type &optional instance)
   "Unpack a scalar value."
@@ -692,30 +532,6 @@
                                     ,@(gen-unpacker buffer i protobuf name type repeated packed)
                                     )))
                              field-specs)
-                               
-               ;; ,@(mapcan (lambda (field-spec)
-               ;;             (when (symbol-string= (car field-spec) "FIELD")
-               ;;               (destructuring-bind (field name type position 
-               ;;                                          &key 
-               ;;                                          (default nil)
-               ;;                                          (required nil)
-               ;;                                          (repeated nil)
-               ;;                                          (packed nil)
-               ;;                                          (optional nil))
-               ;;                   field-spec
-               ;;                 (declare (ignore field default required optional))
-               ;;                 (let ((desired-typecode (wire-typecode type repeated packed)))
-               ;;                   `((,position 
-               ;;                      (assert 
-               ;;                       (= ,typecode ,desired-typecode) ()
-               ;;                       "Invalid typecode for field ~A. Wanted ~A (~A) but found ~A (~A)." 
-               ;;                       (quote ,name) 
-               ;;                       ,desired-typecode (pb:typecode-meaning ,desired-typecode)
-               ;;                       ,typecode (pb:typecode-meaning ,typecode))
-               ;;                      ,@(gen-unpacker buffer i protobuf name type repeated packed)
-               ;;                      ))))))
-               ;;           field-specs)
-
                (otherwise (error "Unhandled position ~A in class ~A, buffer ~A, need to skip" 
                                  ,pos ',name ,buffer)))))))))
 
@@ -763,17 +579,6 @@
                 (binio:decode-uvarint ,buffer ,start)
               (values (,enum-symbol ,value) ,length))))))))
         
- 
-
-;;    `((defmethod pb::enum-symbol ((enum-name (eql ',enum-name)) (enum-code integer))
-;;        (case enum-code
-;;          ,@(map-enums (lambda (symbol code) `(,code ,symbol)) enums)
-;;          (otherwise (error "Unknown enum ~A code: ~A" ',enum-name enum-code))))
-;;      (defmethod pb::enum-code ((enum-name (eql ',enum-name)) (enum-symbol symbol))
-;;        (case enum-symbol
-;;          ,@(map-enums (lambda (symbol code) `(,symbol ,code)) enums)
-;;          (otherwise (error "Unknown enum ~A symbol: ~A" ',enum-name enum-symbol)))))))
-        
   
 (defun gen-enums (msg-name specs)
   (mapcan (lambda (spec)
@@ -795,38 +600,6 @@
                        :initform ,(gen-init-form type repeated packed)
                        ))
                    field-specs))))
-      ;; ,(mapcan (lambda (field-spec)
-      ;;            (when (symbol-string= (car field-spec) "FIELD")
-      ;;              (destructuring-bind (field field-name type position 
-      ;;                                         &key 
-      ;;                                         (default nil)
-      ;;                                         (required nil)
-      ;;                                         (repeated nil)
-      ;;                                         (packed nil)
-      ;;                                         (optional nil))
-      ;;                  field-spec
-      ;;                (declare (ignore position field default required optional))
-      ;;                `((,field-name 
-      ;;                   :type ,(lisp-type type repeated)
-      ;;                   :initform ,(gen-init-form type repeated packed)
-      ;;                   )))))
-      ;;          field-specs))))
-
-
-
-;; (defun load-proto-se (path &optional (package (find-package :cl-user)))
-;;   (with-open-file (stream path)
-;;     (loop 
-;;        for form = (read stream nil)
-;;        until (null form)
-;;        do
-;;          (format t "~S~%" form)
-;;        collect
-;;          (cond 
-;;            ((symbol-string= (car form) "MESSAGE")
-;;             (format t "Declareing: ~&~S~%" form)
-;;             (declare-message form package))
-;;            (t (error "Unknown form in proto file: ~A" (car form)))))))
 
 
 (defun gen-msg-defs (name body)
