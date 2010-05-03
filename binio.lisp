@@ -124,6 +124,22 @@
 ;; screw with bignums.  Everything should get converted to use this
 ;; eventually.
 
+
+;; A fast path for SBCL when native and encoded are the same
+#+sbcl
+(defmacro def-decoder-sbcl (name c-type lisp-type)
+  `(progn
+     (declaim (inline ,name))
+     (defun ,name (buffer &optional (start 0))
+       (declare (type octet-vector buffer)
+                (type fixnum start))
+       (assert (> (length buffer)
+                  (+ start ,(cffi:foreign-type-size c-type)))
+               () "Buffer too small for requested data type: ~A" ,c-type)
+       (the ,lisp-type
+         (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) start)
+                       ,c-type)))))
+
 (defmacro def-decoder (name c-type lisp-type endian)
   (let ((native-endian (ecase (cffi:with-foreign-object (x :uint16)
                                 (setf (cffi:mem-aref x :uint8 0) 1)
@@ -132,24 +148,26 @@
                          (1 :little)
                          (256 :big)))
         (n (cffi::foreign-type-size c-type)))
-    
-    `(progn
-       (declaim (inline ,name))
-       (defun ,name (buffer &optional (start 0))
-         (declare (type octet-vector buffer)
-                  (type fixnum start))
-         (the ,lisp-type
-           (cffi:with-foreign-object (x ,c-type)
-             ,@(loop 
-                  for i below n
-                  for j = (if (eq endian native-endian) i
-                              (- n i 1))
-                  collect
-                    `(setf (cffi:mem-aref x :uint8 ,j) 
-                           (aref buffer (+ start ,i))))
-             (cffi:mem-ref x ,c-type)))))))
-
-
+    (if (and (eq endian native-endian)
+             (string= "SBCL" (lisp-implementation-type)))
+        `(def-decoder-sbcl ,name ,c-type ,lisp-type)
+        `(progn
+           (declaim (inline ,name))
+           (defun ,name (buffer &optional (start 0))
+             (declare (type octet-vector buffer)
+                      (type fixnum start))
+             (the ,lisp-type
+               (cffi:with-foreign-object (x ,c-type)
+                 (setf ,@(loop 
+                            for i below n
+                            for j = (if (eq endian native-endian) i
+                                        (- n i 1))
+                            append
+                              `((cffi:mem-aref x :uint8 ,j) 
+                                (aref buffer (+ start ,i)))))
+                 (cffi:mem-ref x ,c-type))))))))
+  
+  
 ;; Note: swapping the byte-order is about 5 times slower
 (def-decoder decode-double-float-le :double double-float :little)
 (def-decoder decode-double-float-be :double double-float :big)
@@ -407,8 +425,10 @@
                         (if (zerop v-next) 0 (ash 1 7)))))
      finally (return (values (- i start) buffer))))
 
+
 (defun decode-uvarint (buffer start)
-  (declare (type octet-vector buffer))
+  (declare (type octet-vector buffer)
+           (fixnum start))
   (loop
      for i from 1      ; octets read
      for j from start  ; position in buffer
@@ -418,6 +438,36 @@
      for accum = piece then (dpb piece (byte 7 k) accum)
      when (not (logbitp 7 octet))
      return (values accum i)))
+
+;; ;; Not really any faster
+;; (defun decode-uvarint (buffer start)
+;;   (declare (type octet-vector buffer)
+;;            (fixnum start))
+;;   (labels ((mask (x)
+;;              (logand #x7F x))
+;;            (extract (index shift)
+;;              (ash (mask (aref buffer (+ start index)))
+;;                   shift)))
+;;     (cond ;; fast paths
+;;       ((not (logbitp 7 (aref buffer start)))
+;;        (values (aref buffer start) 
+;;                1))
+;;       ((not (logbitp 7 (aref buffer (+ start 1))))
+;;        (values (logior (mask (aref buffer start)) 
+;;                        (extract 1 7))
+;;                2))
+;;       ((not (logbitp 7 (aref buffer (+ start 2))))
+;;        (values (logior (mask (aref buffer start))
+;;                        (extract 1 7)
+;;                        (extract 2 14))
+;;                3))
+;;       ((not (logbitp 7 (aref buffer (+ start 3))))
+;;        (values (logior (mask (aref buffer start))
+;;                        (extract 1 7)
+;;                        (extract 2 14)
+;;                        (extract 3 21))
+;;                4))
+;;       (t (decode-uvarint-slow buffer start)))))
 
 (defun encode-svarint (value &optional
                        (buffer (make-octet-vector (svarint-size value)))
