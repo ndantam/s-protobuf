@@ -47,11 +47,18 @@
    :make-octet-vector :octet-vector
    :encode-utf8 :decode-utf8
    :utf8-size
+   :decode-double-float-le :decode-double-float-be
+   :decode-float-le :decode-float-be
+   :decode-uint32-le :decode-uint32-be
+   :decode-sint32-le :decode-sint32-be
+   :decode-uint64-le :decode-uint64-be
+   :decode-sint64-le :decode-sint64-be
    ))
 
 ;; types u?int{8,16,32,63}, double, float
 
 
+;;(declaim (optimize (speed 3) (safety 0)))
 (in-package :binio)
 
 ;; encoding fuctions:
@@ -67,7 +74,9 @@
 (deftype octet-vector (&optional count)
   `(simple-array octet (,count)))
 
+(declaim (inline make-octet-vector))
 (defun make-octet-vector (count)
+  (declare (fixnum count))
   (make-array count :element-type 'octet))
 
 (defun octet-vector (&rest args)
@@ -75,50 +84,132 @@
     (loop 
        for x in args
        for i from 0
-         do
+       do
          (setf (aref v i) x))
     v))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; some endian handling ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; ;;; some endian handling ;;;
+;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun index-endian (index start count endian)
-  (declare (fixnum start count index)
-           (type symbol endian))
-  (case endian
-    (:little 
-     (+ start index)) 
-    (:big 
-     (+ start count -1 (- index)))
-    (otherwise 
-     (error "endian must be :big or :little, not ~S" endian))))
+;; (declaim (inline index-endian aref-endian (setf aref-endian)))
+;; (defun index-endian (index start count endian)
+;;   (declare (fixnum start count index)
+;;            (type symbol endian))
+;;   (case endian
+;;     (:little 
+;;      (+ start index)) 
+;;     (:big 
+;;      (+ start count -1 (- index)))
+;;     (otherwise 
+;;      (error "endian must be :big or :little, not ~S" endian))))
 
-(defun aref-endian (buffer index start count endian)
-  (declare (fixnum start count index))
-  (declare (type octet-vector buffer))
-  (aref buffer (index-endian index start count endian)))
+;; (defun aref-endian (buffer index start count endian)
+;;   (declare (fixnum start count index))
+;;   (declare (type octet-vector buffer))
+;;   (aref buffer (index-endian index start count endian)))
 
-(defun (setf aref-endian) (value buffer index start count endian)
-  (declare (fixnum start count index))
-  (declare (type octet-vector buffer))
-  (setf (aref buffer (index-endian index start count endian))
-        value))
+;; (defun (setf aref-endian) (value buffer index start count endian)
+;;   (declare (fixnum start count index))
+;;   (declare (type octet-vector buffer))
+;;   (setf (aref buffer (index-endian index start count endian))
+;;         value))
+
+
+;;;;;;;;;;;;;;;;;;;;;
+;;; CFFI DECODERS ;;;
+;;;;;;;;;;;;;;;;;;;;;
+
+;; FIXME: this CFFI hack is much faster than letting lisp clumsily
+;; screw with bignums.  Everything should get converted to use this
+;; eventually.
+
+(defmacro def-decoder (name c-type lisp-type endian)
+  (let ((native-endian (ecase (cffi:with-foreign-object (x :uint16)
+                                (setf (cffi:mem-aref x :uint8 0) 1)
+                                (setf (cffi:mem-aref x :uint8 1) 0)
+                                (cffi:mem-ref x :uint16))
+                         (1 :little)
+                         (256 :big)))
+        (n (cffi::foreign-type-size c-type)))
+    
+    `(progn
+       (declaim (inline ,name))
+       (defun ,name (buffer &optional (start 0))
+         (declare (type octet-vector buffer)
+                  (type fixnum start))
+         (the ,lisp-type
+           (cffi:with-foreign-object (x ,c-type)
+             ,@(loop 
+                  for i below n
+                  for j = (if (eq endian native-endian) i
+                              (- n i 1))
+                  collect
+                    `(setf (cffi:mem-aref x :uint8 ,j) 
+                           (aref buffer (+ start ,i))))
+             (cffi:mem-ref x ,c-type)))))))
+
+
+;; Note: swapping the byte-order is about 5 times slower
+(def-decoder decode-double-float-le :double double-float :little)
+(def-decoder decode-double-float-be :double double-float :big)
+
+(def-decoder decode-float-le :float single-float :little)
+(def-decoder decode-float-be :float single-float :big)
+
+(def-decoder decode-sint64-le :int64 (signed-byte 64) :little)
+(def-decoder decode-sint64-be :int64 (signed-byte 64) :big)
+
+(def-decoder decode-uint64-le :uint64 (unsigned-byte 64) :little)
+(def-decoder decode-uint64-be :uint64 (unsigned-byte 64) :big)
+
+(def-decoder decode-sint32-le :int32 (signed-byte 32) :little)
+(def-decoder decode-sint32-be :int32 (signed-byte 32) :big)
+
+(def-decoder decode-uint32-le :uint32 (unsigned-byte 32) :little)
+(def-decoder decode-uint32-be :uint32 (unsigned-byte 32) :big)
+
+(def-decoder decode-sint16-le :int16 (signed-byte 16) :little)
+(def-decoder decode-sint16-be :int16 (signed-byte 16) :big)
+
+(def-decoder decode-uint16-le :uint16 (unsigned-byte 16) :little)
+(def-decoder decode-uint16-be :uint16 (unsigned-byte 16) :big)
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;;; integer types ;;;
 ;;;;;;;;;;;;;;;;;;;;;
 
+(declaim (inline decode-uint decode-sint encode-int))
+
 (defun decode-uint (buffer endian &optional (start 0) (bits 32))
   (declare (fixnum start bits)
            (type octet-vector buffer))
-  (let ((accum 0)
-        (count (/ bits 8)))
-    (declare (integer accum))
-    (dotimes (i count)
-      (setf (ldb (byte 8 (* 8 i)) accum)
-            (aref-endian buffer i start count endian)))
-    (values accum (/ bits 8))))
+  (do* ((n (the fixnum (/ bits 8)))
+        (end (+ start n))
+        (accum 0)
+        (i start (1+ i))
+        (k (the fixnum 
+             (ecase endian 
+               (:little 0)
+               (:big (* 8 (1- n)))))
+           (the fixnum
+             (ecase endian
+               (:little (+ k 8))
+               (:big (- k 8))))))
+       ((= i end) (values accum n))
+    (setq accum (dpb (aref buffer i)
+                     (byte 8 k)
+                     accum))
+    ))
+            
+    ;; (let ((accum 0)
+    ;;       (count (/ bits 8)))
+    ;;   (declare (integer accum))
+    ;;   (dotimes (i count)
+    ;;     (declare (fixnum i))
+    ;;     (setf (ldb (byte 8 (* 8 i)) accum)
+    ;;           (aref-endian buffer i start count endian)))
+    ;;   (values accum (/ bits 8))))
 
 
 (defun decode-sint (buffer endian &optional (start 0) (bits 32) )
@@ -126,21 +217,41 @@
            (type (octet-vector) buffer))
   (let ((result (decode-uint buffer endian start bits))
         (count (/ bits 8)))
-    (when (logbitp (1- (* 8  count)) result)
-      (decf result (ash 1 (* 8 count))))
-    (values result (/ bits 8))))
+    (declare (fixnum count))
+    (when (logbitp (1- bits) result)
+      (decf result (ash 1 bits)))
+    (values result count)))
 
 (defun encode-int (val endian &optional buffer (start 0) (bits 32))
   (declare (integer val)
            (fixnum start bits)
-           (symbol endian))
-  (let* ((count (/ bits 8))
-         (buffer (or buffer (make-octet-vector count))))
-    (declare (type octet-vector buffer))
-    (dotimes (i count)
-      (setf (aref-endian buffer i start count endian)
-            (ldb (byte 8 (* i 8)) val)))
-    (values (/ bits 8) buffer)))
+           (symbol endian)
+           (type (or null octet-vector) buffer))
+  (do* ((n (the fixnum (/ bits 8)))
+        (buffer (or buffer (make-octet-vector n)))
+        (end (+ start n))
+        (i start (1+ i))
+        (k (the fixnum
+             (ecase endian 
+               (:little 0)
+               (:big (* 8 (1- n)))))
+           (the fixnum
+             (ecase endian
+               (:little (+ 8 k))
+               (:big (- k 8))))))
+       ((= i end) (values n buffer))
+    (setf (aref buffer i)
+          (ldb (byte 8 k) val))))
+
+  ;; (let* ((count (/ bits 8))
+  ;;        (buffer (or buffer (make-octet-vector count))))
+  ;;   (declare (type octet-vector buffer))
+  ;;   (dotimes (i count)
+  ;;     (setf (aref-endian buffer i start count endian)
+  ;;           (ldb (byte 8 (* i 8)) val)))
+  ;;   (values (/ bits 8) buffer)))
+
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -151,12 +262,14 @@
 (defmacro def-cffi-cast (name from-lisp-type from-c-type to-c-type)
   (let ((val (gensym))
         (x (gensym)))
-    `(defun ,name (,val)
-       "Use CFFI to extract the bits of val by a C-like cast."
-       (declare (type ,from-lisp-type ,val))
-       (cffi:with-foreign-object (,x ,from-c-type)
-         (setf (cffi:mem-ref ,x ,from-c-type) ,val)
-         (cffi:mem-ref ,x ,to-c-type)))))
+    `(progn 
+       (declaim (inline ,name))
+       (defun ,name (,val)
+         "Use CFFI to extract the bits of val by a C-like cast."
+         (declare (type ,from-lisp-type ,val))
+         (cffi:with-foreign-object (,x ,from-c-type)
+           (setf (cffi:mem-ref ,x ,from-c-type) ,val)
+           (cffi:mem-ref ,x ,to-c-type))))))
                         
 (def-cffi-cast scary-single-float-bits single-float :float :uint32) 
 (def-cffi-cast scary-make-single-float (unsigned-byte 32) :uint32 :float)
@@ -165,6 +278,9 @@
 (def-cffi-cast scary-make-double-float (unsigned-byte 64) :uint64 :double)
 
 
+
+(declaim (inline decode-double-float 
+                 encode-double-float))
 (defun decode-double-float (buffer endian &optional (start 0))
   (declare (type octet-vector buffer)
            (symbol endian))
@@ -187,6 +303,49 @@
     (declare (type octet-vector buffer))
     (encode-int bits endian buffer start)))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; fixed integer types ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (defmacro def-uint-decoder (name bits endian)
+;;     `(progn
+;;        (declaim (inline ,name))
+;;        (defun ,name (buffer &optional (start 0))
+;;          (declare (type octet-vector buffer)
+;;                   (type fixnum start))
+;;          (logior ,@(loop 
+;;                       with n = (/ bits 8)
+;;                       for i below n
+;;                       for j = (ecase endian 
+;;                                 (:little i)
+;;                                 (:big (- n i 1)))
+;;                       collect
+;;                         `(ash (aref buffer (+ start ,i)) ,(* 8 j)))))))
+
+;; (defmacro def-sint-decoder (name bits uint-decoder)
+;;   `(progn
+;;      (declaim (inline ,name))
+;;      (defun ,name (buffer &optional (start 0))
+;;        (declare (type octet-vector buffer)
+;;                 (type fixnum start))
+;;        (let ((u (,uint-decoder buffer start)))
+;;          (declare (type (unsigned-byte ,bits) u))
+;;          (let ((s (if (logbitp ,(1- bits) u)
+;;                       (- u ,(ash 1 bits))
+;;                       u)))
+;;            (declare (type (signed-byte ,bits) s))
+;;            s)))))
+
+;; (def-uint-decoder decode-uint-32-le 32 :little)
+;; (def-uint-decoder decode-uint-64-le 64 :little)
+;; (def-uint-decoder decode-uint-32-be 32 :big)
+;; (def-uint-decoder decode-uint-64-be 64 :big)
+
+;; (def-sint-decoder decode-sint-32-le 32 decode-uint-32-le)
+;; (def-sint-decoder decode-sint-64-le 64 decode-uint-64-le)
+;; (def-sint-decoder decode-sint-32-be 32 decode-uint-32-be)
+;; (def-sint-decoder decode-sint-64-be 64 decode-uint-64-be)
 
 
 ;;;;;;;;;;;;;;;;;;;;
@@ -213,22 +372,25 @@
 ;; numbers.  The google implemention gives uint32_t and uint64_t.
 ;; Let's be unsigned.
 
+(declaim (inline uvarint-size))
 (defun uvarint-size (value)
   (declare (type (integer 0) value))
   (max 1 (ceiling (integer-length value) 7)))
 
+(declaim (inline uvarint-size))
 (defun svarint-size (value)
   (uvarint-size (varint-zigzag value)))
 
 (defun encode-uvarint (value &optional 
                        (buffer (make-octet-vector (uvarint-size value)))
                        (start 0))
-  (declare (type (integer 0) value))
-  (declare (type octet-vector buffer))
+  (declare (type (integer 0) value)
+           (type octet-vector buffer)
+           (type fixnum start))
   (loop 
      for v = value then (ash v -7)
      for v-next = (ash v -7)
-     for j from 0
+     for j from 0 below most-positive-fixnum
      for i = (+ start j)
      until (or (and (zerop v) (> j 0))
                ;; cut out negative handling.
@@ -270,19 +432,19 @@
   (values (varint-unzigzag uv) i)))
 
 
-;; rather (quite) slow...
-(defun read-octets (stream1 &key limit)
-  "read up to limit bytes from stream or eof if limit is nil"
-  (loop  with v =  (make-array 0 
-                               :element-type '(unsigned-byte 8)
-                               :adjustable t :fill-pointer t)
-     for x = (read-byte stream1 nil nil)
-     for i from 0
-     until (or (null x) (and limit (>= i limit)))
-     do (vector-push-extend x v)
-     finally (return (values (make-array (length v) :element-type 'octet
-                                  :initial-contents v)
-                             i))))
+;; ;; rather (quite) slow...
+;; (defun read-octets (stream1 &key limit)
+;;   "read up to limit bytes from stream or eof if limit is nil"
+;;   (loop  with v =  (make-array 0 
+;;                                :element-type '(unsigned-byte 8)
+;;                                :adjustable t :fill-pointer t)
+;;      for x = (read-byte stream1 nil nil)
+;;      for i from 0
+;;      until (or (null x) (and limit (>= i limit)))
+;;      do (vector-push-extend x v)
+;;      finally (return (values (make-array (length v) :element-type 'octet
+;;                                   :initial-contents v)
+;;                              i))))
 
 (defun read-file-octets (filespec &key limit)
   (with-open-file (s filespec :element-type 'octet)
@@ -427,21 +589,28 @@
     (assert (test-sint -10 :little 64))
     (assert (test-sint -4097 :little 64))
     (assert (test-sint 10 :little 64))
+    (assert (test-uint 10 :big 32))
+    (assert (test-uint 1024 :big 32))
+    (assert (test-sint -10 :big 32))
+    (assert (test-sint -10 :big 64))
+    (assert (test-sint -4097 :big 64))
+    (assert (test-sint 10 :big 64))
+
 
     ;; float encoding
-    (assert (test-scary-single 1.0))
+    (assert (test-scary-single 1f0))
     (assert (test-scary-single (coerce pi 'single-float)))
     (assert (test-scary-double 1d0))
     (assert (test-scary-double (coerce pi 'double-float)))
-    (assert (test-single 1.0  (octet-vector 0 0 128 63) :little))
+    (assert (test-single 1f0  (octet-vector 0 0 128 63) :little))
     (assert (test-double 1d0  (octet-vector 0 0 0 0 0 0 240 63)  :little))
 
 
     ;; test varint zigzags based on google's examples
     (assert (test-zigzag 0  0))
     (assert (test-zigzag -1  1))
-    (assert (test-zigzag 1  2))
-    (assert (test-zigzag 2147483647  4294967294))
+    (assert (test-zigzag 1  2)) 
+   (assert (test-zigzag 2147483647  4294967294))
     (assert (test-zigzag -2147483648 4294967295))
     ;; varints
     ;; example encodings from the google docs

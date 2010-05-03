@@ -30,6 +30,7 @@
 ;; Runtime support functions for protocol buffers
 ;; Author Neil T. Dantam
 
+;(declaim (optimize (speed 3) (safety 0)))
 
 (defpackage :protocol-buffer
   (:nicknames :pb)
@@ -145,40 +146,45 @@
 (defmacro with-decoding ((value length) decode-expr &body body)
   `(multiple-value-bind (,value ,length)
        ,decode-expr
-     (declare (integer ,length))
+     (declare (fixnum ,length))
      ,@body))
 
 (defun make-start-code (slot-position typecode)
+  (declare (type fixnum slot-position typecode))
   (logior (ash slot-position 3) typecode))
 
 (defun read-start-code (buffer start)
   (declare (octet-vector buffer)
-           (integer start))
+           (fixnum start))
   "returns (values position typecode bytes-read)"
   (with-decoding (vi i) (decode-uvarint buffer start)
+    (declare (type fixnum vi i))
     (values (ash vi -3) (ldb (byte 3 0) vi) i)))
 
 (defun encode-start-code (slot-position typecode buffer start)
   (declare (octet-vector buffer)
-           (integer start typecode slot-position))
+           (fixnum start typecode slot-position))
   (encode-uvarint (make-start-code slot-position typecode)
                  buffer start))
 
 (defun pack-embedded (protobuf buffer start)
   (declare (octet-vector buffer)
-           (integer start))
+           (fixnum start))
   (let* ((size (packed-size protobuf))
          (size-size (binio:encode-uvarint size buffer start))
          (encoded-size (pack protobuf buffer (+ start size-size))))
+    (declare (fixnum size size-size encoded-size))
     (assert (= size encoded-size))
     (values (+ size-size encoded-size) buffer)))
     
 
 (defun packed-uvarint-size (array)
+  (declare (type (simple-array integer (*)) array))
   (loop for x across array 
      summing (binio::uvarint-size x)))
 
 (defun packed-svarint-size (array)
+  (declare (type (simple-array integer (*)) array))
   (loop for x across array 
      summing (binio::svarint-size x)))
 
@@ -187,6 +193,7 @@
      summing (binio::uvarint-size (funcall coder x))))
 
 (defun length-delim-size (length)
+  (declare (fixnum length))
   (+ (binio::uvarint-size length) length))
 
 (defun typecode-meaning (typecode)
@@ -198,32 +205,41 @@
 
 ;;; encoders
 (defun encode-bool (val buffer start)
+  (declare (octet-vector buffer)
+           (fixnum start))
   (setf (aref buffer start) (if val 1 0))
   1)
 
 ;;; fixed-width decoders
+(declaim (inline decode-uint32
+                 decode-sint32
+                 decode-uint64
+                 decode-sint64
+                 decode-double
+                 decode-bool))
 (defun decode-uint32 (buffer start)
-  (values (binio:decode-uint buffer :little start 32)
+  (values (binio:decode-uint32-le buffer start)
           4))
 
 (defun decode-sint32 (buffer start)
-  (values (binio:decode-sint buffer :little start 32) 
+  (values (binio:decode-sint32-le buffer start) 
           4))
 
 (defun decode-uint64 (buffer start)
-  (values (binio:decode-uint buffer :little start 64)
+  (values (binio:decode-uint64-le buffer start)
           8))
 
 (defun decode-sint64 (buffer start)
-  (values (binio:decode-sint buffer :little start 64)
+  (values (binio:decode-sint64-le buffer start)
           8))
 
 (defun decode-double (buffer start)
-  (values (binio:decode-double-float buffer 
-                                     :little start)
+  (values (binio:decode-double-float-le buffer start)
           8))
 
 (defun decode-bool (buffer start)
+  (declare (octet-vector buffer)
+           (fixnum start))
   (values (case (aref buffer start)
             (0 nil)
             (1 t)

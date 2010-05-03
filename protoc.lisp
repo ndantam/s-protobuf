@@ -189,6 +189,9 @@
 (defun make-start-code-sym (slot-position type)
   (pb::make-start-code slot-position (wire-typecode type)))
 
+(defun symbol-keyword (sym)
+  (intern (symbol-name sym) :keyword))
+
 (defun symbol-string= (a b)
   (string= (string a) (string b)))
 
@@ -584,6 +587,7 @@
                      (declare (ignore position))
                      `(,name 
                        :type ,(lisp-type type repeated)
+                       :initarg ,(symbol-keyword name)
                        :initform ,(gen-init-form type repeated packed)
                        ))
                    specs))))

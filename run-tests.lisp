@@ -5,4 +5,5 @@
 
 (test)
 
-(sb-ext:quit)
+#+sbcl (sb-ext:quit)
+#+clisp (ext:quit)
