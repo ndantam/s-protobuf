@@ -153,8 +153,9 @@
   (declare (type fixnum slot-position typecode))
   (logior (ash slot-position 3) typecode))
 
+(declaim (inline read-start-code))
 (defun read-start-code (buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (fixnum start))
   "returns (values position typecode bytes-read)"
   (with-decoding (vi i) (decode-uvarint buffer start)
@@ -162,13 +163,13 @@
     (values (ash vi -3) (ldb (byte 3 0) vi) i)))
 
 (defun encode-start-code (slot-position typecode buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (fixnum start typecode slot-position))
   (encode-uvarint (make-start-code slot-position typecode)
                  buffer start))
 
 (defun pack-embedded (protobuf buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (fixnum start))
   (let* ((size (packed-size protobuf))
          (size-size (binio:encode-uvarint size buffer start))
@@ -205,7 +206,7 @@
 
 ;;; encoders
 (defun encode-bool (val buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (fixnum start))
   (setf (aref buffer start) (if val 1 0))
   1)
@@ -235,10 +236,11 @@
 
 (defun decode-double (buffer start)
   (values (binio:decode-double-float-le buffer start)
+          ;(binio:decode-double-float buffer :little start)
           8))
 
 (defun decode-bool (buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (fixnum start))
   (values (case (aref buffer start)
             (0 nil)
@@ -263,7 +265,7 @@ returns (values length length-of-length)"
          
 (defun decode-length-delim (buffer start decoder)
   "decoder is (lambda (buffer start end)"
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (integer start))
   (let ((i start))
     (with-decoding (len len-len)
@@ -274,7 +276,7 @@ returns (values length length-of-length)"
         (values val (+ len len-len))))))
 
 (defun decode-string (buffer start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (integer start))
   (decode-length-delim buffer start 
                        (lambda (buffer start end)
@@ -283,7 +285,7 @@ returns (values length length-of-length)"
                                              :buffer-end end))))
 
 (defun unpack-embedded-protobuf (buffer protobuf start)
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (integer start))
   (decode-length-delim buffer start
                        (lambda (buffer start end)
@@ -294,7 +296,7 @@ returns (values length length-of-length)"
                      (fixed-bit-size nil) 
                      (start 0) 
                      end )
-  (declare (octet-vector buffer)
+  (declare (type octet-vector buffer)
            (integer start))
   (assert (or (not fixed-bit-size) 
               (zerop (rem fixed-bit-size 8))) ()
