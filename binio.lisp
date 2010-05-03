@@ -124,49 +124,55 @@
 ;; screw with bignums.  Everything should get converted to use this
 ;; eventually.
 
+(eval-when (:compile-toplevel :load-toplevel)
+  (defun needs-byteswap (endian)
+    (assert (or (eq :little endian)
+                (eq :big endian)))
+    (let ((native-endian (ecase (cffi:with-foreign-object (x :uint16)
+                                  (setf (cffi:mem-aref x :uint8 0) 1)
+                                  (setf (cffi:mem-aref x :uint8 1) 0)
+                                  (cffi:mem-ref x :uint16))
+                           (1 :little)
+                           (256 :big))))
+      (not (eq endian native-endian)))))
 
 ;; A fast path for SBCL when native and encoded are the same
+;; Question: Do we need to pin the buffer?
 #+sbcl
-(defmacro def-decoder-sbcl (name c-type lisp-type)
+(defmacro def-decoder-sbcl (c-type)
+  `(progn
+     (assert (>= (length buffer)
+                 (+ start ,(cffi:foreign-type-size c-type)))
+             () "Buffer too small for requested data type: ~A" ,c-type)
+     (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) start)
+                   ,c-type)))
+
+(defmacro def-decoder-cffi (c-type swap)
+  `(progn
+     (cffi:with-foreign-object (x ,c-type)
+       (setf ,@(loop 
+                  with n = (cffi:foreign-type-size c-type)
+                  for i below n
+                  for j = (if swap 
+                              (- n i 1)
+                              i)
+                  append
+                    `((cffi:mem-aref x :uint8 ,j) 
+                      (aref buffer (+ start ,i)))))
+       (cffi:mem-ref x ,c-type))))
+
+(defmacro def-decoder (name c-type lisp-type endian)
   `(progn
      (declaim (inline ,name))
      (defun ,name (buffer &optional (start 0))
        (declare (type octet-vector buffer)
                 (type fixnum start))
-       (assert (>= (length buffer)
-                   (+ start ,(cffi:foreign-type-size c-type)))
-               () "Buffer too small for requested data type: ~A" ,c-type)
        (the ,lisp-type
-         (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) start)
-                       ,c-type)))))
-
-(defmacro def-decoder (name c-type lisp-type endian)
-  (let ((native-endian (ecase (cffi:with-foreign-object (x :uint16)
-                                (setf (cffi:mem-aref x :uint8 0) 1)
-                                (setf (cffi:mem-aref x :uint8 1) 0)
-                                (cffi:mem-ref x :uint16))
-                         (1 :little)
-                         (256 :big)))
-        (n (cffi::foreign-type-size c-type)))
-    (if (and (eq endian native-endian)
-             (string= "SBCL" (lisp-implementation-type)))
-        `(def-decoder-sbcl ,name ,c-type ,lisp-type)
-        `(progn
-           (declaim (inline ,name))
-           (defun ,name (buffer &optional (start 0))
-             (declare (type octet-vector buffer)
-                      (type fixnum start))
-             (the ,lisp-type
-               (cffi:with-foreign-object (x ,c-type)
-                 (setf ,@(loop 
-                            for i below n
-                            for j = (if (eq endian native-endian) i
-                                        (- n i 1))
-                            append
-                              `((cffi:mem-aref x :uint8 ,j) 
-                                (aref buffer (+ start ,i)))))
-                 (cffi:mem-ref x ,c-type))))))))
-  
+         ,(let ((swap (needs-byteswap endian)))
+               (if (and (not swap) nil 
+                        (string= "SBCL" (lisp-implementation-type)))
+                   `(def-decoder-sbcl ,c-type)
+                   `(def-decoder-cffi ,c-type ,swap)))))))
   
 ;; Note: swapping the byte-order is about 5 times slower
 (def-decoder decode-double-float-le :double double-float :little)
@@ -192,6 +198,78 @@
 
 (def-decoder decode-uint16-le :uint16 (unsigned-byte 16) :little)
 (def-decoder decode-uint16-be :uint16 (unsigned-byte 16) :big)
+
+
+;;;;;;;;;;;;;;;;;;;;;
+;;; CFFI ENCODERS ;;;
+;;;;;;;;;;;;;;;;;;;;;
+
+;; A fast path for SBCL when native and encoded are the same
+;; Question: Do we need to pin the buffer?
+#+sbcl
+(defmacro def-encoder-sbcl (c-type)
+  `(progn  
+     (assert (>= (length buffer)
+                 (+ start ,(cffi:foreign-type-size c-type)))
+             () "Buffer too small for requested data type: ~A" ,c-type)
+     (setf (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) 
+                                           start)
+                         ,c-type)
+           value)))
+
+
+(defmacro def-encoder-cffi (c-type swap)
+  `(cffi:with-foreign-object (x ,c-type)
+     (setf (cffi:mem-ref x ,c-type) value)
+     (setf ,@(loop 
+                with n = (cffi:foreign-type-size c-type)
+                for i below n
+                for j = (if swap  
+                            (- n i 1)
+                            i)
+                append
+                  `((aref buffer (+ start ,i))
+                    (cffi:mem-aref x :uint8 ,j))))
+     (cffi:mem-ref x ,c-type)))
+
+(defmacro def-encoder (name c-type lisp-type endian)
+  `(progn
+     (declaim (inline ,name))
+     (defun ,name (value &optional 
+                   (buffer (make-octet-vector ,(cffi:foreign-type-size c-type)))
+                   (start 0))
+       (declare (type ,lisp-type value)
+                (type octet-vector buffer)
+                (type fixnum start))
+       ,(let ((swap (needs-byteswap endian)))
+             (if (and (not swap)
+                      (string= "SBCL" (lisp-implementation-type)))
+                 `(def-encoder-sbcl ,c-type)
+                 `(def-encoder-cffi ,c-type ,swap)))
+       (values ,(cffi:foreign-type-size c-type) buffer))))
+
+
+(def-encoder encode-double-le :double double-float :little)
+(def-encoder encode-double-be :double double-float :big)
+(def-encoder encode-float-le :float single-float :little)
+(def-encoder encode-float-be :float single-float :big)
+
+(def-encoder encode-uint64-le :uint64 (unsigned-byte 64) :little)
+(def-encoder encode-uint64-be :uint64 (unsigned-byte 64) :big)
+(def-encoder encode-sint64-le :int64 (signed-byte 64) :little)
+(def-encoder encode-sint64-be :int64 (signed-byte 64) :big)
+
+(def-encoder encode-uint32-le :uint32 (unsigned-byte 32) :little)
+(def-encoder encode-uint32-be :uint32 (unsigned-byte 32) :big)
+(def-encoder encode-sint32-le :int32 (signed-byte 32) :little)
+(def-encoder encode-sint32-be :int32 (signed-byte 32) :big)
+
+(def-encoder encode-uint16-le :uint16 (unsigned-byte 16) :little)
+(def-encoder encode-uint16-be :uint16 (unsigned-byte 16) :big)
+(def-encoder encode-sint16-le :int16 (signed-byte 16) :little)
+(def-encoder encode-sint16-be :int16 (signed-byte 16) :big)
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;;; integer types ;;;
@@ -239,6 +317,7 @@
     (when (logbitp (1- bits) result)
       (decf result (ash 1 bits)))
     (values result count)))
+
 
 (defun encode-int (val endian &optional buffer (start 0) (bits 32))
   (declare (integer val)
