@@ -133,8 +133,8 @@
      (defun ,name (buffer &optional (start 0))
        (declare (type octet-vector buffer)
                 (type fixnum start))
-       (assert (> (length buffer)
-                  (+ start ,(cffi:foreign-type-size c-type)))
+       (assert (>= (length buffer)
+                   (+ start ,(cffi:foreign-type-size c-type)))
                () "Buffer too small for requested data type: ~A" ,c-type)
        (the ,lisp-type
          (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) start)
