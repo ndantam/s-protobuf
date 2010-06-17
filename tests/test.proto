@@ -28,3 +28,7 @@ message testx2 {
   }
   required e a = 1;
 }
+
+message float_msg {
+  required float a = 1;
+}

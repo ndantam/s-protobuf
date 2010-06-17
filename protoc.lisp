@@ -323,6 +323,9 @@
                     ((:double)
                      `(binio:encode-double-float
                        ,slot-sym :little ,buffer-sym ,start-place))
+                    ((:float)
+                     `(binio:encode-single-float
+                       ,slot-sym :little ,buffer-sym ,start-place))
                     (:string
                      (with-gensyms (strbuf size)
                        `(multiple-value-bind (,size ,strbuf)
@@ -418,6 +421,8 @@
      'pb::decode-string)
     (:double
      'pb::decode-double)
+    (:float
+     'pb::decode-single)
     ((:bool :boolean)
      'pb::decode-bool)
     (otherwise 
