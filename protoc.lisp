@@ -236,10 +236,13 @@
         ((enum-type-p type) 
          `(binio:uvarint-size (,(symcat type 'code) ,slot)))
         ((eq :string type)
-         `(pb::length-delim-size (binio:utf8-size ,slot)))
+         `(if ,slot (pb::length-delim-size (binio:utf8-size ,slot))
+              0))
         ((eq :bytes type)
-         `(pb::length-delim-size (length ,slot)))
-        (t `(pb::length-delim-size (pb::packed-size ,slot))))))
+         `(if ,slot (pb::length-delim-size (length ,slot))
+              0))
+        (t `(if ,slot (pb::length-delim-size (pb::packed-size ,slot))
+                0)))))
 
 (defmacro def-repeated-size (type slot pos)
   "Packed size of a repeated field."
@@ -280,7 +283,10 @@
   (let* ((objsym (gensym))
          (slot  `(slot-value ,objsym ',slot-name)))
     `(let ((,objsym ,object))
-       (if (slot-boundp ,objsym ',slot-name)
+       (if (and (slot-boundp ,objsym ',slot-name)
+                ,(if (length-delim-p type)
+                     slot
+                     t))
            ,(cond
              ((and (not repeated) (not packed))
               `(def-scalar-size ,type ,slot ,pos))
@@ -335,13 +341,17 @@
                      (if (enum-type-p type)
                          `(binio:encode-uvarint (,(symcat type 'code) ,slot-sym)
                                                 ,buffer-sym ,start-place)
-                         `(pb::pack-embedded ,slot-sym ,buffer-sym ,start-place))))))))
+                         `(pb::pack-embedded ,slot-sym ,buffer-sym ,start-place)
+                              )))))))
            
 (defun gen-pack-slot (bufsym startsym objsym name type pos &key 
                       repeated packed &allow-other-keys)
   "Generate code to pack a single slot."
   (let ((slot `(slot-value ,objsym ',name)))
-    `(when (slot-boundp ,objsym ',name)
+    `(when (and (slot-boundp ,objsym ',name)
+                ,(if (length-delim-p type)
+                     slot
+                     t))
       ,@(cond 
          ;; scalar value
          ((null repeated)
@@ -377,7 +387,8 @@
             ;; write elements
             ,(let ((isym (gensym)))
                   `(dotimes (,isym (length ,slot))
-                     (def-pack-val ,startsym ,bufsym (aref ,slot ,isym) ,type)))))))))
+                     (def-pack-val ,startsym ,bufsym (aref ,slot ,isym) ,type))))))
+      )))
 
 (defun gen-pack (name specs)
   "Generate code for the PACK defmethod."
@@ -437,6 +448,8 @@
   (with-gensyms (value length)
     `(pb::with-decoding (,value ,length)
          (do-unpack-value ,type ,buffer ,start-place ,instance)
+       ,@(when (primitive-type-p type)
+               `((declare (type ,(lisp-type type) ,value))))
        (incf ,start-place ,length)
        ,value)))
 
@@ -470,16 +483,13 @@
            (incf ,startsym length))))
       ;; array, not packed 
       ((and repeated (not packed))
-       `((unless (slot-boundp ,objsym ',name)
-           (setf ,slot 
-                 (make-array 0 :element-type ',(lisp-type type) 
-                             :fill-pointer t
-                             :adjustable t)))
-         (vector-push-extend 
+       ;; FIXME: SBCL conses here because it's not a simple array
+       ;; would be nice to avoid that
+       `((vector-push-extend 
           (do-unpack-and-incf ,startsym ,bufsym ,type 
-                            ,(when (not (primitive-type-p type))
-                                   `(make-instance ',type)))
-                             ,slot)))
+                              ,(when (not (primitive-type-p type))
+                                     `(make-instance ',type)))
+          ,slot)))
       ;; something else
       (t (error "Can't make unpacker for this type ~A, repeated: ~A, packed: ~A" 
                 type repeated packed)))))
@@ -495,9 +505,11 @@
        ;; loop through buffer until we at the end
        ;; each decoded field will INCF i by its length
        (do ((,i ,start))
-           ((>= ,i ,end) (values ,protobuf (- ,i ,start)))
+           ((>= ,i ,end) (values ,protobuf (the fixnum (- ,i ,start))))
+         (declare (fixnum ,i))
          (multiple-value-bind (,pos ,typecode ,startlen)
              (pb::read-start-code ,buffer ,i)
+           (declare (fixnum ,pos ,typecode ,startlen))
            (incf ,i ,startlen)
            ;; current working with a simple case statement,
            ;; perhaps I could do something more efficient...
@@ -568,7 +580,7 @@
            ((integer-type-p type)  0)
            ((eq type :string) nil)
            ((enum-type-p type) nil)
-           (t `(make-instance ',type))))
+           (t nil)))
     ((and repeated packed) 
      ;; packed array
      nil)
