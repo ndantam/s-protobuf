@@ -42,9 +42,7 @@
 
 
 (defun slot-bound-value (object slot &optional default-value)
-  (if (slot-boundp object slot)
-      (slot-value object slot)
-      default-value))
+  (or (pb::slot-bound-setp object slot) default-value))
 
 ;; FIXME: these print-object definitions are incomplete
 
@@ -83,13 +81,13 @@
                                    0))
           (slot-value object 'name)
           (slot-value object 'number))
-  (when (slot-boundp object 'options)
+  (when (pb::slot-bound-setp object 'options)
     (prin1 (slot-value object 'options) stream))
   (write-string ";" stream))
                                
 
 (defmethod print-object ((object field-options) stream)
-  (when (slot-boundp object 'packed)
+  (when (pb::slot-bound-setp object 'packed)
     (format stream "[packed=~A]" (slot-value object 'packed))))
 
 (defun unmangle (str)
@@ -183,11 +181,9 @@
                 '(:repeated t))
           ,@(if (eq (slot-value object 'label) :label-required)
                 '(:required t))
-          ,@(if (and (slot-boundp object 'options)
-                     (let ((options (slot-value object 'options)))
-                       (and 
-                        (slot-boundp options 'packed)
-                        (slot-value options 'packed))))
+          ,@(if (and (pb::slot-bound-setp object 'options)
+                     (pb::slot-bound-setp (slot-value object 'options)
+                                      'packed))
                 (progn
                   (assert  (eq (slot-value object 'label) :label-repeated) ()
                            "Can't have packed, nonrepeated field")

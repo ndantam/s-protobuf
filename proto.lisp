@@ -142,6 +142,11 @@
 
 ;;; All decoding functions return (values object bytes-decoded)
 
+(declaim (inline slot-bound-setp))
+(defun slot-bound-setp (object slot-name)
+  (and (slot-boundp object slot-name)
+       (slot-value  object slot-name)))
+
 ;; make it obvious what we're doing
 (defmacro with-decoding ((value length) decode-expr &body body)
   `(multiple-value-bind (,value ,length)
