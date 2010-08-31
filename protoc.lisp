@@ -461,7 +461,8 @@
       ;; scalar slot
       ((and (not repeated) (not packed))
        `( ,@(unless (primitive-type-p type)
-                    `((unless (slot-boundp ,objsym ',name)
+                    `((unless (and (slot-boundp ,objsym ',name)
+                                   ,slot)
                         (setf ,slot (make-instance ',(lisp-type type))))))
             (setf ,slot 
                   (do-unpack-and-incf ,startsym ,bufsym ,type ,slot))))
