@@ -239,6 +239,11 @@
           ;(binio:decode-double-float buffer :little start)
           8))
 
+
+(defun decode-single (buffer start)
+  (values (binio:decode-float-le buffer start)
+          4))
+
 (defun decode-bool (buffer start)
   (declare (type octet-vector buffer)
            (fixnum start))

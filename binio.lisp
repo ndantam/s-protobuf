@@ -41,6 +41,7 @@
    :decode-uint :decode-sint 
    :encode-int 
    :encode-double-float :decode-double-float
+   :encode-single-float :decode-single-float
    :encode-svarint :decode-svarint
    :encode-uvarint :decode-uvarint
    :uvarint-size :svarint-size

@@ -68,7 +68,7 @@
 ;;   (enum e (:a 0) (:b 10) (:c 20))
 ;;   (field a testx2-e 1 :repeated nil :packed nil))
 
-(load-proto-set "/home/ntd/src/s-protobuf/tests/test.protobin")
+(load-proto-set "./tests/test.protobin")
 
 ;; (defun redef () 
 ;;   (protoc::def-proto-msg test1
@@ -192,6 +192,14 @@
     
     (test-1 buffer-x2 'testx2 'a :b)
 
+    ;; Test float-msg
+    (let* ((val 3.14s0)
+           (msg (make-instance 'proto-test::float-msg :a val)))
+      (format t "~&Testing float-msg~%")
+      (assert (= val 
+                 (slot-value (pb:unpack (pb:pack1 msg) 
+                                        (make-instance 'proto-test::float-msg))
+                             'proto-test::a))))
     t))
 
 
