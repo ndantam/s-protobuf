@@ -1,0 +1,5 @@
+Package: s-protobuf
+Version: 0.0.1
+Architecture: i386
+Maintainer: Neil T. Dantam
+Description: Protocol Buffers in Common Lisp
