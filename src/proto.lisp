@@ -36,7 +36,7 @@
   (:nicknames :pb)
   (:use :cl :binio)
   (:export
-   :pack :pack1
+   :pack :pack1 :encode
    :unpack
    :packed-size
    :enum-symbol
@@ -60,6 +60,10 @@
     (declare (ignore size))
     buf))
 
+(defun encode (protobuf)
+  (multiple-value-bind (size buf)
+      (pack protobuf)
+    (values buf size)))
 ;;(defparameter +types+ '(:double :float
 ;;                        :int32 :int64
 ;;                        :uint32 :uint64
