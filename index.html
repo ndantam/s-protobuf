@@ -1,0 +1,1268 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+  <title>S-Protobuf</title>
+  <style type="text/css">
+  pre { padding:5px; background-color:#e0e0e0 }
+  h3, h4 { text-decoration: underline; }
+  a { text-decoration: none; padding: 1px 2px 1px 2px; }
+  a:visited { text-decoration: none; padding: 1px 2px 1px 2px; }
+  a:hover { text-decoration: none; padding: 1px 1px 1px 1px; border: 1px solid #000000; }
+  a:focus { text-decoration: none; padding: 1px 2px 1px 2px; border: none; }
+  a.none { text-decoration: none; padding: 0; }
+  a.none:visited { text-decoration: none; padding: 0; }
+  a.none:hover { text-decoration: none; border: none; padding: 0; }
+  a.none:focus { text-decoration: none; border: none; padding: 0; }
+  a.noborder { text-decoration: none; padding: 0; }
+  a.noborder:visited { text-decoration: none; padding: 0; }
+  a.noborder:hover { text-decoration: none; border: none; padding: 0; }
+  a.noborder:focus { text-decoration: none; border: none; padding: 0; }
+  pre.none { padding:5px; background-color:#ffffff }
+  </style>
+</head>
+
+<body bgcolor=white>
+
+<h2> S-Protobuf - Google Protocol Buffers for Common Lisp</h2>
+
+<blockquote>
+<br>&nbsp;<br><h3><a name=abstract class=none>Abstract</a></h3>
+
+The code comes with
+a <a
+href="http://www.opensource.org/licenses/bsd-license.php">BSD-style
+license</a> so you can basically do with it whatever you want.
+
+<p>
+<font color=red>Download shortcut:</font> git
+clone <a href="https://github.com/ndantam/s-protobuf.git">https://github.com/ndantam/s-protobuf.git</a>
+</blockquote>
+
+<br>&nbsp;<br><h3><a class=none name="contents">Contents</a></h3>
+<ol>
+  <li><a href="#download">Download</a>
+  <li><a href="#dictionary">The PROTOCOL-BUFFER-COMPILER dictionary</a>
+    <ol>
+      <li><a href="#def-proto-enum"><code>def-proto-enum</code></a>
+      <li><a href="#def-proto-msg"><code>def-proto-msg</code></a>
+      <li><a href="#load-proto-set"><code>load-proto-set</code></a>
+    </ol>
+  <li><a href="#dictionary">The PROTOCOL-BUFFER dictionary</a>
+    <ol>
+      <li><a href="#encode"><code>encode</code></a>
+      <li><a href="#enum-code"><code>enum-code</code></a>
+      <li><a href="#enum-symbol"><code>enum-symbol</code></a>
+      <li><a href="#pack"><code>pack</code></a>
+      <li><a href="#pack1"><code>pack1</code></a>
+      <li><a href="#packed-size"><code>packed-size</code></a>
+      <li><a href="#typecode-meaning"><code>typecode-meaning</code></a>
+      <li><a href="#unpack"><code>unpack</code></a>
+    </ol>
+  <li><a href="#dictionary">The BINIO dictionary</a>
+    <ol>
+      <li><a href="#decode-double-float"><code>decode-double-float</code></a>
+      <li><a href="#decode-double-float-be"><code>decode-double-float-be</code></a>
+      <li><a href="#decode-double-float-le"><code>decode-double-float-le</code></a>
+      <li><a href="#decode-float-be"><code>decode-float-be</code></a>
+      <li><a href="#decode-float-le"><code>decode-float-le</code></a>
+      <li><a href="#decode-single-float"><code>decode-single-float</code></a>
+      <li><a href="#decode-sint"><code>decode-sint</code></a>
+      <li><a href="#decode-sint32-be"><code>decode-sint32-be</code></a>
+      <li><a href="#decode-sint32-le"><code>decode-sint32-le</code></a>
+      <li><a href="#decode-sint64-be"><code>decode-sint64-be</code></a>
+      <li><a href="#decode-sint64-le"><code>decode-sint64-le</code></a>
+      <li><a href="#decode-svarint"><code>decode-svarint</code></a>
+      <li><a href="#decode-uint"><code>decode-uint</code></a>
+      <li><a href="#decode-uint32-be"><code>decode-uint32-be</code></a>
+      <li><a href="#decode-uint32-le"><code>decode-uint32-le</code></a>
+      <li><a href="#decode-uint64-be"><code>decode-uint64-be</code></a>
+      <li><a href="#decode-uint64-le"><code>decode-uint64-le</code></a>
+      <li><a href="#decode-utf8"><code>decode-utf8</code></a>
+      <li><a href="#decode-uvarint"><code>decode-uvarint</code></a>
+      <li><a href="#encode-double-float"><code>encode-double-float</code></a>
+      <li><a href="#encode-int"><code>encode-int</code></a>
+      <li><a href="#encode-single-float"><code>encode-single-float</code></a>
+      <li><a href="#encode-svarint"><code>encode-svarint</code></a>
+      <li><a href="#encode-utf8"><code>encode-utf8</code></a>
+      <li><a href="#encode-uvarint"><code>encode-uvarint</code></a>
+      <li><a href="#make-octet-vector"><code>make-octet-vector</code></a>
+      <li><a href="#octet-vector"><code>octet-vector</code></a>
+      <li><a href="#svarint-size"><code>svarint-size</code></a>
+      <li><a href="#utf8-size"><code>utf8-size</code></a>
+      <li><a href="#uvarint-size"><code>uvarint-size</code></a>
+  </ol>
+  <li><a href="#ack">Acknowledgements</a>
+</ol>
+
+<br>&nbsp;<br><h3><a class=none name="download">Download</a></h3>
+
+S-Protobuf with this documentation can be downloaded from <a
+href="http://github.com/ndantam/s-protobuf">http://github.com/ndantam/s-protobuf
+  </a>
+
+
+<br>&nbsp;<br><h3><a class=none name="dictionary">The PROTOCOL-BUFFER-COMPILER dictionary</a></h3>
+
+
+
+<!-- Entry for DEF-PROTO-ENUM -->
+
+<p><br>[Macro]<br><a class=none name='def-proto-enum'><b>def-proto-enum</b> <i>name declaration* statement*</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DEF-PROTO-ENUM -->
+
+
+<!-- Entry for DEF-PROTO-MSG -->
+
+<p><br>[Macro]<br><a class=none name='def-proto-msg'><b>def-proto-msg</b> <i>name declaration* statement*</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DEF-PROTO-MSG -->
+
+
+<!-- Entry for LOAD-PROTO-SET -->
+
+<p><br>[Macro]<br><a class=none name='load-proto-set'><b>load-proto-set</b> <i>filespec</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for LOAD-PROTO-SET -->
+
+
+
+<br>&nbsp;<br><h3><a class=none name="dictionary">The PROTOCOL-BUFFER dictionary</a></h3>
+
+
+
+<!-- Entry for ENCODE -->
+
+<p><br>[Function]<br><a class=none name='encode'><b>encode</b> <i>protobuf</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE -->
+
+
+<!-- Entry for ENUM-CODE -->
+
+<p><br>[Generic function]<br><a class=none name='enum-code'><b>enum-code</b> <i>enum-name enum-symbol</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENUM-CODE -->
+
+
+<!-- Entry for ENUM-SYMBOL -->
+
+<p><br>[Generic function]<br><a class=none name='enum-symbol'><b>enum-symbol</b> <i>enum-name enum-code</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENUM-SYMBOL -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Generic function]<br><a class=none name='pack'><b>pack</b> <i>protobuf <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf file-descriptor-set) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf file-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf descriptor-proto-extension-range) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf field-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf enum-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf enum-value-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf service-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf method-descriptor-proto) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf file-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf message-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf field-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf enum-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf enum-value-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf service-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf method-options) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf uninterpreted-option) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK -->
+
+<p><br>[Method]<br><a class=none><b>pack</b> <i>(protobuf uninterpreted-option-name-part) <tt>&amp;optional</tt> buf start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK -->
+
+
+<!-- Entry for PACK1 -->
+
+<p><br>[Function]<br><a class=none name='pack1'><b>pack1</b> <i>protobuf</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACK1 -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Generic function]<br><a class=none name='packed-size'><b>packed-size</b> <i>protobuf</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf file-descriptor-set)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf file-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf descriptor-proto-extension-range)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf field-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf enum-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf enum-value-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf service-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf method-descriptor-proto)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf file-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf message-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf field-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf enum-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf enum-value-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf service-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf method-options)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf uninterpreted-option)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for PACKED-SIZE -->
+
+<p><br>[Method]<br><a class=none><b>packed-size</b> <i>(protobuf uninterpreted-option-name-part)</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for PACKED-SIZE -->
+
+
+<!-- Entry for TYPECODE-MEANING -->
+
+<p><br>[Function]<br><a class=none name='typecode-meaning'><b>typecode-meaning</b> <i>typecode</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for TYPECODE-MEANING -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Generic function]<br><a class=none name='unpack'><b>unpack</b> <i>buffer protobuf <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf file-descriptor-set) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf file-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf descriptor-proto-extension-range) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf field-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf enum-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf enum-value-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf service-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf method-descriptor-proto) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf file-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf message-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf field-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf enum-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf enum-value-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf service-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf method-options) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf uninterpreted-option) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+<!-- Entry for UNPACK -->
+
+<p><br>[Method]<br><a class=none><b>unpack</b> <i>buffer (protobuf uninterpreted-option-name-part) <tt>&amp;optional</tt> start end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UNPACK -->
+
+
+
+<br>&nbsp;<br><h3><a class=none name="dictionary">The BINIO dictionary</a></h3>
+
+
+
+<!-- Entry for DECODE-DOUBLE-FLOAT -->
+
+<p><br>[Function]<br><a class=none name='decode-double-float'><b>decode-double-float</b> <i>buffer endian <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-DOUBLE-FLOAT -->
+
+
+<!-- Entry for DECODE-DOUBLE-FLOAT-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-double-float-be'><b>decode-double-float-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-DOUBLE-FLOAT-BE -->
+
+
+<!-- Entry for DECODE-DOUBLE-FLOAT-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-double-float-le'><b>decode-double-float-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-DOUBLE-FLOAT-LE -->
+
+
+<!-- Entry for DECODE-FLOAT-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-float-be'><b>decode-float-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-FLOAT-BE -->
+
+
+<!-- Entry for DECODE-FLOAT-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-float-le'><b>decode-float-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-FLOAT-LE -->
+
+
+<!-- Entry for DECODE-SINGLE-FLOAT -->
+
+<p><br>[Function]<br><a class=none name='decode-single-float'><b>decode-single-float</b> <i>buffer endian <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINGLE-FLOAT -->
+
+
+<!-- Entry for DECODE-SINT -->
+
+<p><br>[Function]<br><a class=none name='decode-sint'><b>decode-sint</b> <i>buffer endian <tt>&amp;optional</tt> start bits</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINT -->
+
+
+<!-- Entry for DECODE-SINT32-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-sint32-be'><b>decode-sint32-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINT32-BE -->
+
+
+<!-- Entry for DECODE-SINT32-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-sint32-le'><b>decode-sint32-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINT32-LE -->
+
+
+<!-- Entry for DECODE-SINT64-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-sint64-be'><b>decode-sint64-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINT64-BE -->
+
+
+<!-- Entry for DECODE-SINT64-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-sint64-le'><b>decode-sint64-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SINT64-LE -->
+
+
+<!-- Entry for DECODE-SVARINT -->
+
+<p><br>[Function]<br><a class=none name='decode-svarint'><b>decode-svarint</b> <i>buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-SVARINT -->
+
+
+<!-- Entry for DECODE-UINT -->
+
+<p><br>[Function]<br><a class=none name='decode-uint'><b>decode-uint</b> <i>buffer endian <tt>&amp;optional</tt> start bits</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UINT -->
+
+
+<!-- Entry for DECODE-UINT32-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-uint32-be'><b>decode-uint32-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UINT32-BE -->
+
+
+<!-- Entry for DECODE-UINT32-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-uint32-le'><b>decode-uint32-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UINT32-LE -->
+
+
+<!-- Entry for DECODE-UINT64-BE -->
+
+<p><br>[Function]<br><a class=none name='decode-uint64-be'><b>decode-uint64-be</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UINT64-BE -->
+
+
+<!-- Entry for DECODE-UINT64-LE -->
+
+<p><br>[Function]<br><a class=none name='decode-uint64-le'><b>decode-uint64-le</b> <i>buffer <tt>&amp;optional</tt> start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UINT64-LE -->
+
+
+<!-- Entry for DECODE-UTF8 -->
+
+<p><br>[Function]<br><a class=none name='decode-utf8'><b>decode-utf8</b> <i>buffer <tt>&amp;key</tt> string-start string buffer-start buffer-end</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UTF8 -->
+
+
+<!-- Entry for DECODE-UVARINT -->
+
+<p><br>[Function]<br><a class=none name='decode-uvarint'><b>decode-uvarint</b> <i>buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for DECODE-UVARINT -->
+
+
+<!-- Entry for ENCODE-DOUBLE-FLOAT -->
+
+<p><br>[Function]<br><a class=none name='encode-double-float'><b>encode-double-float</b> <i>val endian <tt>&amp;optional</tt> buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-DOUBLE-FLOAT -->
+
+
+<!-- Entry for ENCODE-INT -->
+
+<p><br>[Function]<br><a class=none name='encode-int'><b>encode-int</b> <i>val endian <tt>&amp;optional</tt> buffer start bits</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-INT -->
+
+
+<!-- Entry for ENCODE-SINGLE-FLOAT -->
+
+<p><br>[Function]<br><a class=none name='encode-single-float'><b>encode-single-float</b> <i>val endian <tt>&amp;optional</tt> buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-SINGLE-FLOAT -->
+
+
+<!-- Entry for ENCODE-SVARINT -->
+
+<p><br>[Function]<br><a class=none name='encode-svarint'><b>encode-svarint</b> <i>value <tt>&amp;optional</tt> buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-SVARINT -->
+
+
+<!-- Entry for ENCODE-UTF8 -->
+
+<p><br>[Function]<br><a class=none name='encode-utf8'><b>encode-utf8</b> <i>string <tt>&amp;key</tt> string-start string-end buffer buffer-start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-UTF8 -->
+
+
+<!-- Entry for ENCODE-UVARINT -->
+
+<p><br>[Function]<br><a class=none name='encode-uvarint'><b>encode-uvarint</b> <i>value <tt>&amp;optional</tt> buffer start</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for ENCODE-UVARINT -->
+
+
+<!-- Entry for MAKE-OCTET-VECTOR -->
+
+<p><br>[Function]<br><a class=none name='make-octet-vector'><b>make-octet-vector</b> <i>count</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for MAKE-OCTET-VECTOR -->
+
+
+<!-- Entry for OCTET-VECTOR -->
+
+<p><br>[Function]<br><a class=none name='octet-vector'><b>octet-vector</b> <i><tt>&amp;rest</tt> args</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for OCTET-VECTOR -->
+
+
+<!-- Entry for SVARINT-SIZE -->
+
+<p><br>[Function]<br><a class=none name='svarint-size'><b>svarint-size</b> <i>value</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for SVARINT-SIZE -->
+
+
+<!-- Entry for UTF8-SIZE -->
+
+<p><br>[Function]<br><a class=none name='utf8-size'><b>utf8-size</b> <i>string</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UTF8-SIZE -->
+
+
+<!-- Entry for UVARINT-SIZE -->
+
+<p><br>[Function]<br><a class=none name='uvarint-size'><b>uvarint-size</b> <i>value</i> =&gt; <i>result</i></a>
+<blockquote><br>
+
+
+
+</blockquote>
+
+<!-- End of entry for UVARINT-SIZE -->
+
+
+<br>&nbsp;<br><h3><a class=none name="ack">Acknowledgements</a></h3>
+
+<p>
+This documentation was prepared with <a href="http://weitz.de/documentation-template/">DOCUMENTATION-TEMPLATE</a>.
+</p>
+<p>
+
+</body>
+</html>
