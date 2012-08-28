@@ -30,9 +30,19 @@
 <blockquote>
 <br>&nbsp;<br><h3><a name=abstract class=none>Abstract</a></h3>
 
-The code comes with
-a <a
-href="http://www.opensource.org/licenses/bsd-license.php">BSD-style
+This package, S-PROTOBUF, provides a Common Lisp implementation for
+the
+<a href="http://code.google.com/apis/protocolbuffers/docs/overview.html">
+Protocol Buffers
+</a>
+data encoding format, created by Google.  S-PROTOBUF supports message
+packing and unpacking using all the specified data types, repeated
+fields, and nested messages. There is no support for Extensions or
+Services.</p>
+
+
+<p> The code comes with
+a <a href="http://www.opensource.org/licenses/bsd-license.php">BSD-style
 license</a> so you can basically do with it whatever you want.
 
 <p>
@@ -43,13 +53,14 @@ clone <a href="https://github.com/ndantam/s-protobuf.git">https://github.com/nda
 <br>&nbsp;<br><h3><a class=none name="contents">Contents</a></h3>
 <ol>
   <li><a href="#download">Download</a>
-  <li><a href="#dictionary">The PROTOCOL-BUFFER-COMPILER dictionary</a>
+  <li><a href="#usage">Usage</a>
+  <li><a href="#dictionary-pbc">The PROTOCOL-BUFFER-COMPILER dictionary</a>
     <ol>
       <li><a href="#def-proto-enum"><code>def-proto-enum</code></a>
       <li><a href="#def-proto-msg"><code>def-proto-msg</code></a>
       <li><a href="#load-proto-set"><code>load-proto-set</code></a>
     </ol>
-  <li><a href="#dictionary">The PROTOCOL-BUFFER dictionary</a>
+  <li><a href="#dictionary-pb">The PROTOCOL-BUFFER dictionary</a>
     <ol>
       <li><a href="#encode"><code>encode</code></a>
       <li><a href="#enum-code"><code>enum-code</code></a>
@@ -60,7 +71,7 @@ clone <a href="https://github.com/ndantam/s-protobuf.git">https://github.com/nda
       <li><a href="#typecode-meaning"><code>typecode-meaning</code></a>
       <li><a href="#unpack"><code>unpack</code></a>
     </ol>
-  <li><a href="#dictionary">The BINIO dictionary</a>
+  <li><a href="#dictionary-binio">The BINIO dictionary</a>
     <ol>
       <li><a href="#decode-double-float"><code>decode-double-float</code></a>
       <li><a href="#decode-double-float-be"><code>decode-double-float-be</code></a>
@@ -93,6 +104,7 @@ clone <a href="https://github.com/ndantam/s-protobuf.git">https://github.com/nda
       <li><a href="#utf8-size"><code>utf8-size</code></a>
       <li><a href="#uvarint-size"><code>uvarint-size</code></a>
   </ol>
+  <li><a href="#implementation">Implementation Notes</a>
   <li><a href="#ack">Acknowledgements</a>
 </ol>
 
@@ -103,7 +115,91 @@ href="http://github.com/ndantam/s-protobuf">http://github.com/ndantam/s-protobuf
   </a>
 
 
-<br>&nbsp;<br><h3><a class=none name="dictionary">The PROTOCOL-BUFFER-COMPILER dictionary</a></h3>
+
+<h3><a name='usage'>Usage</a></h3>
+
+
+
+<h4>Compiling Encoders<h4>
+
+<h5>Using .proto files</h5>
+
+<p>
+S-PROTOBUF reads in the binary output of protoc . Thus, you should
+first run your .proto file through protoc using the -o option:
+</p>
+
+<pre>$ protoc -omyfile.protobin myfile.proto</pre>
+
+<p>
+Then you can use the macro function <code>protoc:load-proto-set</code>
+which reads in the .protobin and expands into the definitions for
+classes, functions, and methods.
+</p>
+
+<pre>
+(require :s-protobuf)
+(protoc:load-proto-set "myfile.protobin")
+</pre>
+
+<p>
+The class will be put into the package listed in .proto file, or
+CL-USER is none was specified. Nested packages will probably not work
+very well.
+</p>
+
+<h5>Writing protobuf's as S-Expressions</h5>
+
+<p>
+If curly braces make you angry, you can also write the protocol buffer
+definitions as S-Expressions. Here is documentation by example:
+</p>
+
+<pre>
+(require :s-protobuf)
+
+;; A simple message
+(protoc:def-proto-msg test1
+  (field a :int32 1))
+
+;; A nested message
+(protoc:def-proto-msg test3
+  (field c test1 3))
+
+;; repeated fields
+(protoc:def-proto-msg test4
+  (field d :int32 4 :repeated t :packed nil))
+
+;; enums
+(protoc:def-proto-msg testx2
+  (enum e (:a 0) (:b 10) (:c 20))
+  (field a testx2-e 1 :repeated nil :packed nil))
+</pre>
+
+<p>
+The class will be put into whatever package the symbol for it's name
+is in.  If you want some more details, you can try macroexpanding
+load-proto-set.
+</p>
+
+<h4>Using Encoders</h4>
+
+<p>
+Each protobuf message will be compiled into a class. Identifiers are
+mangled into a lispy form (upcased symbols, hyphenated words). Enums
+will be translated to and from keyword symbols on encoding and
+decoding. Repeated fields are vectors which are are simple-array's
+when possible (packed types with fixed bit size).
+</p>
+
+<ul>
+  <li><a href="#encode">pb::encode</a>
+  <li><a href="#pack">pb::pack</a>
+  <li><a href="#unpack">pb::unpack</a>
+</ul>
+
+
+<br>&nbsp;<br><h3><a class=none name="dictionary-pbc">The PROTOCOL-BUFFER-COMPILER dictionary</a></h3>
 
 
 
@@ -144,7 +240,7 @@ href="http://github.com/ndantam/s-protobuf">http://github.com/ndantam/s-protobuf
 
 
 
-<br>&nbsp;<br><h3><a class=none name="dictionary">The PROTOCOL-BUFFER dictionary</a></h3>
+<br>&nbsp;<br><h3><a class=none name="dictionary-pb">The PROTOCOL-BUFFER dictionary</a></h3>
 
 
 
@@ -893,7 +989,7 @@ href="http://github.com/ndantam/s-protobuf">http://github.com/ndantam/s-protobuf
 
 
 
-<br>&nbsp;<br><h3><a class=none name="dictionary">The BINIO dictionary</a></h3>
+<br>&nbsp;<br><h3><a class=none name="dictionary-binio">The BINIO dictionary</a></h3>
 
 
 
@@ -1257,7 +1353,53 @@ href="http://github.com/ndantam/s-protobuf">http://github.com/ndantam/s-protobuf
 <!-- End of entry for UVARINT-SIZE -->
 
 
+<h3><a class=none name="implementation">Implementation Notes</a>
+
+<h4>Details</h4>
+<ul>
+  <li>We don't parse .proto files or use protoc to generate lisp code (leave C++ to the masochists), but rather read in the protobuf-encoded FileDescriptorSet output of protoc and compile that.
+  <li>The varint handling code supports arbitrary precision.
+  <li>We don't track unknown fields
+</ul>
+
+<h4>Incompatibilities</h4>
+
+Varints are strictly unsigned (svarints are signed). Cutting things off at 10 bytes and making it negative is a kludge.
+
+<h4>Bugs</h4>
+<ul>
+  <li>Insufficient testcases
+  <li>Packages -- sort of supported, but probably not too well
+  <li>Required/Optional fields -- we don't currently care if required fields aren't there
+</ul>
+
+<h4>Missing Features</h4>
+
+<ul>
+  <li>Skipping Unknown Fields
+  <li>Default Values
+  <li>Tracking Unknown Fields
+  <li>Better support for (#-sbcl). The basic testcases do run on CLISP. UTF-8 only works on SBCL.
+  <li>Extensions
+  <li>Services
+</ul>
+
+<h4>Possible Improvements</h4>
+
+<ul>
+  <li>Some refactoring of protoc.lisp would help
+  <li>ASDF Integration
+  <li>Packed length-delimited fields (Google may not support it, but we could)
+</ul>
+
 <br>&nbsp;<br><h3><a class=none name="ack">Acknowledgements</a></h3>
+
+<p>
+Zach Beane provided some helpful suggestions to clean up parts of the
+code. The original Protocol Buffers design was developed internally at
+Google by a number of people. Current efforts seem to be led by Kenton
+Varda ({firstname}@google.com).
+</p>
 
 <p>
 This documentation was prepared with <a href="http://weitz.de/documentation-template/">DOCUMENTATION-TEMPLATE</a>.
