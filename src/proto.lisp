@@ -135,7 +135,7 @@
 
 ;;(defun wire-typecode (type &optional repeated packed)
 ;;  (if (and repeated packed) 2
-;;      (cond 
+;;      (cond
 ;;        ((varint-enum-p type) 0)
 ;;        ((fixed64-p type) 1)
 ;;        ((fixed32-p type) 5)
@@ -186,20 +186,20 @@
     (declare (fixnum size size-size encoded-size))
     (assert (= size encoded-size))
     (values (+ size-size encoded-size) buffer)))
-    
+
 
 (defun packed-uvarint-size (array)
   (declare (type (simple-array integer (*)) array))
-  (loop for x across array 
+  (loop for x across array
      summing (binio::uvarint-size x)))
 
 (defun packed-svarint-size (array)
   (declare (type (simple-array integer (*)) array))
-  (loop for x across array 
+  (loop for x across array
      summing (binio::svarint-size x)))
 
 (defun packed-enum-size (coder array)
-  (loop for x across array 
+  (loop for x across array
      summing (binio::uvarint-size (funcall coder x))))
 
 (defun length-delim-size (length)
@@ -232,7 +232,7 @@
           4))
 
 (defun decode-sint32 (buffer start)
-  (values (binio:decode-sint32-le buffer start) 
+  (values (binio:decode-sint32-le buffer start)
           4))
 
 (defun decode-uint64 (buffer start)
@@ -259,13 +259,13 @@
   (values (case (aref buffer start)
             (0 nil)
             (1 t)
-            (otherwise 
+            (otherwise
              (error "Invalid boolean valude")))
           1))
-        
+
 
 (defmacro decode-length-and-incf-start (start-place buffer)
-  "reads the length field, 
+  "reads the length field,
 increments start-place by length,
 returns (values length length-of-length)"
   (let ((isym (gensym))
@@ -276,7 +276,7 @@ returns (values length length-of-length)"
            (binio:decode-uvarint ,buffer ,isym)
          (setf ,start-place (+ ,isym ,len-len-sym))
          (values ,len-sym ,len-len-sym)))))
-         
+
 (defun decode-length-delim (buffer start decoder)
   "decoder is (lambda (buffer start end)"
   (declare (type octet-vector buffer)
@@ -292,10 +292,10 @@ returns (values length length-of-length)"
 (defun decode-string (buffer start)
   (declare (type octet-vector buffer)
            (integer start))
-  (decode-length-delim buffer start 
+  (decode-length-delim buffer start
                        (lambda (buffer start end)
-                         (binio::decode-utf8 buffer 
-                                             :buffer-start start 
+                         (binio::decode-utf8 buffer
+                                             :buffer-start start
                                              :buffer-end end))))
 
 (defun unpack-embedded-protobuf (buffer protobuf start)
@@ -306,13 +306,13 @@ returns (values length length-of-length)"
                          (unpack buffer protobuf start end))))
 
 
-(defun decode-array (type decoder buffer &key 
-                     (fixed-bit-size nil) 
-                     (start 0) 
+(defun decode-array (type decoder buffer &key
+                     (fixed-bit-size nil)
+                     (start 0)
                      end )
   (declare (type octet-vector buffer)
            (integer start))
-  (assert (or (not fixed-bit-size) 
+  (assert (or (not fixed-bit-size)
               (zerop (rem fixed-bit-size 8))) ()
               "Can only decode integral-octet-sized types")
   (let ((end (or end (length buffer))))
@@ -332,7 +332,7 @@ returns (values length length-of-length)"
           (if fixed-bit-size
               (setf (aref array j) value)
               (vector-push-extend value array)))))))
-                     
+
 
 ;;(defun proto-test ()
 ;;  (labels ((test-start-code (type pos result)

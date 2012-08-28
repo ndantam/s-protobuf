@@ -84,7 +84,7 @@
   (when (pb::slot-bound-setp object 'options)
     (prin1 (slot-value object 'options) stream))
   (write-string ";" stream))
-                               
+
 
 (defmethod print-object ((object field-options) stream)
   (when (pb::slot-bound-setp object 'packed)
@@ -94,7 +94,7 @@
   (with-output-to-string (s)
     (loop for i from 0 below (length str)
          do
-         (cond 
+         (cond
            ((or (eq (aref str i) #\_)
                 (eq (aref str i) #\.))
             (write-char #\- s))
@@ -115,8 +115,8 @@
 (defun sanitize-name (name package)
   (let ((name name) (package package))
     (when (eq (aref name 0) #\.)
-      (setq package 
-            (lookup-package-name 
+      (setq package
+            (lookup-package-name
              (unmangle (subseq name 1 (position #\. name :start 1)))))
       (setq name (subseq name (1+ (position #\. name :start 1)))))
     (intern (unmangle name) package)))
@@ -125,7 +125,7 @@
   (sanitize-name (slot-value object slot) package))
 
 (defgeneric sanitize (object &key parent package)
-  (:documentation 
+  (:documentation
   "Convert the structure based protocol buffer representation
   obtainened by parsing the binary output of protoc into
   S-Expressions"))
@@ -142,15 +142,15 @@
   (declare (ignore parent package))
   (apply #'nconc (map 'list #'sanitize (slot-value object 'file))))
 
-;; single-file container 
+;; single-file container
 (defmethod sanitize ((object file-descriptor-proto) &key parent package)
   (declare (ignore parent package))
   (let ((sanitizer (sanitizer object (sanitize-package object))))
-    (nconc 
+    (nconc
      (map 'list sanitizer
           (slot-bound-value object 'enum-type))
-     (apply #'nconc 
-            (map 'list sanitizer 
+     (apply #'nconc
+            (map 'list sanitizer
                  (slot-value object 'message-type))))))
 
 
@@ -158,9 +158,9 @@
 (defmethod sanitize ((object descriptor-proto) &key parent package)
   (declare (ignore parent))
   `((message ,(sanitize-name-slot object 'name package)
-             ,@(map 'list (sanitizer nil package) 
+             ,@(map 'list (sanitizer nil package)
                     (slot-bound-value object 'enum-type))
-             ,@(map 'list (sanitizer object package) 
+             ,@(map 'list (sanitizer object package)
                     (slot-value object 'field)))))
 
 (defun sanitize-type (field-desc package)
@@ -199,7 +199,7 @@
       ;(format t "~&~S~&"  (type-of parent))
       ;(format t "~&No~&"))
   `(enum ,(sanitize-name name package)
-         ,@(map 'list (sanitizer object package) 
+         ,@(map 'list (sanitizer object package)
                 (slot-value object 'value)))))
 ;; enum value
 (defmethod sanitize ((object enum-value-descriptor-proto) &key parent package)
@@ -209,7 +209,7 @@
 
 
 (defun load-proto-structs (filespec)
-  (pb:unpack 
+  (pb:unpack
    (binio::read-file-octets filespec)
    (make-instance 'file-descriptor-set)))
 
@@ -220,7 +220,7 @@
 
 (defun macroize-se (se)
   (mapcan (lambda (a)
-            (cond 
+            (cond
               ((protoc::symbol-string= (car a) 'message)
                (protoc::gen-msg-defs (cadr a) (cddr a)))
                ;(list (cons 'protoc::def-proto-msg (cdr a))))
@@ -228,19 +228,18 @@
                (setf (get (cadr a) 'enum) t) ;; must set here
                (list (cons 'protoc::def-proto-enum (cdr a))))))
           se))
-              
+
 
 (defmacro load-proto-set (filespec)
-  (cons 'progn 
+  (cons 'progn
         (macroize-se (sanitize-file filespec))))
 
 
 
 (defun get-proto-set (filespec)
-  (cons 'progn 
+  (cons 'progn
         (macroize-se (sanitize-file filespec))))
 
 (defmacro dump-proto-set (filespec)
-  (cons 'progn 
+  (cons 'progn
         (macroize-se (sanitize-file filespec))))
-

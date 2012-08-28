@@ -1,5 +1,5 @@
 ;;; -*- Lisp -*-
-;; Copyright 2008, Google Inc. 
+;; Copyright 2008, Google Inc.
 ;; Copyright (c) 2009, Georgia Tech Research Corporation
 ;; All rights reserved.
 ;;
@@ -62,18 +62,18 @@
   (field is-extension :bool 2 :required t))
 
 (def-proto-msg uninterpreted-option
-  (field name uninterpreted-option-name-part 2 
+  (field name uninterpreted-option-name-part 2
          :repeated t)
   (field identifier-value :string 3 :optional t)
   (field positive-int-value :uint64 4 :optional t)
   (field negative-int-value :sint64 5 :optional t)
   (field double-value :double 6 :optional t)
   ;(field string-value :bytes :optional t)
- ) 
+ )
 
 
 (def-proto-msg method-options
-   (field uninterpreted-option 
+   (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
@@ -81,47 +81,47 @@
 
 
 (def-proto-msg service-options
-   (field uninterpreted-option 
+   (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
 )
 
 (def-proto-msg enum-value-options
-   (field uninterpreted-option 
+   (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
 )
 
 (def-proto-msg enum-options
-   (field uninterpreted-option 
+   (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
 )
- 
+
 
 (def-proto-msg field-options
   (enum ctype
         (:cord 1)
         (:string_piece 2))
-  (field ctype field-options-ctype 1 
+  (field ctype field-options-ctype 1
          :optional t)
   (field packed :bool 2 :optional t)
   (field experimental-map-key :string 9
          :optional t)
-  (field uninterpreted-option 
+  (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
 )
-  
+
 
 (def-proto-msg message-options
   (field message-set-wire-format :bool
          1 :optional t)
-  (field uninterpreted-option 
+  (field uninterpreted-option
          uninterpreted-option 999
          :repeated t)
   ;; extension ??
@@ -133,7 +133,7 @@
   (enum optimize-mode
         (:speed 1)
         (:code-size 2))
-  (field optimize-for 
+  (field optimize-for
          file-options-optimize-mode
          9
          :optional t)
@@ -153,7 +153,7 @@
 
 (def-proto-msg service-descriptor-proto
   (field name :string 1)
-  (field method method-descriptor-proto 2 
+  (field method method-descriptor-proto 2
          :repeated t)
   (field options service-options 3
          :optional t))
@@ -172,7 +172,7 @@
 
 
 (def-proto-msg field-descriptor-proto
-  (enum type 
+  (enum type
         (:double 1)
         (:float 2)
         (:int64 3)
@@ -205,7 +205,7 @@
   (field extendee :string  2 :optional t)
   (field default-value :string 7 :optional t)
   (field options field-options 8 :optional t))
-        
+
 
 (def-proto-msg descriptor-proto-extension-range
   (field start :int32 1 :optional t)
@@ -218,7 +218,7 @@
   (field extension field-descriptor-proto 6 :repeated t)
   (field nested-type descriptor-proto 3 :repeated t)
   (field enum-type enum-descriptor-proto 4 :repeated t)
-  (field extension-range descriptor-proto-extension-range 5 
+  (field extension-range descriptor-proto-extension-range 5
          :repeated t)
   (field options message-options 7 :optional t))
 
@@ -237,4 +237,3 @@
 ;; multi file container
 (def-proto-msg  file-descriptor-set
   (field file file-descriptor-proto 1 :repeated t))
-

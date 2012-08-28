@@ -36,10 +36,10 @@
 
 (defpackage :binio
   (:use :cl)
-  (:export 
+  (:export
    :octet :octet-vector :make-octet-vector
-   :decode-uint :decode-sint 
-   :encode-int 
+   :decode-uint :decode-sint
+   :encode-int
    :encode-double-float :decode-double-float
    :encode-single-float :decode-single-float
    :encode-svarint :decode-svarint
@@ -82,7 +82,7 @@
 
 (defun octet-vector (&rest args)
   (let ((v (make-octet-vector (length args))))
-    (loop 
+    (loop
        for x in args
        for i from 0
        do
@@ -98,11 +98,11 @@
 ;;   (declare (fixnum start count index)
 ;;            (type symbol endian))
 ;;   (case endian
-;;     (:little 
-;;      (+ start index)) 
-;;     (:big 
+;;     (:little
+;;      (+ start index))
+;;     (:big
 ;;      (+ start count -1 (- index)))
-;;     (otherwise 
+;;     (otherwise
 ;;      (error "endian must be :big or :little, not ~S" endian))))
 
 ;; (defun aref-endian (buffer index start count endian)
@@ -151,14 +151,14 @@
 (defmacro def-decoder-cffi (c-type swap)
   `(progn
      (cffi:with-foreign-object (x ,c-type)
-       (setf ,@(loop 
+       (setf ,@(loop
                   with n = (cffi:foreign-type-size c-type)
                   for i below n
-                  for j = (if swap 
+                  for j = (if swap
                               (- n i 1)
                               i)
                   append
-                    `((cffi:mem-aref x :uint8 ,j) 
+                    `((cffi:mem-aref x :uint8 ,j)
                       (aref buffer (+ start ,i)))))
        (cffi:mem-ref x ,c-type))))
 
@@ -170,11 +170,11 @@
                 (type fixnum start))
        (the ,lisp-type
          ,(let ((swap (needs-byteswap endian)))
-               (if (and (not swap) nil 
+               (if (and (not swap) nil
                         (string= "SBCL" (lisp-implementation-type)))
                    `(def-decoder-sbcl ,c-type)
                    `(def-decoder-cffi ,c-type ,swap)))))))
-  
+
 ;; Note: swapping the byte-order is about 5 times slower
 (def-decoder decode-double-float-le :double double-float :little)
 (def-decoder decode-double-float-be :double double-float :big)
@@ -209,11 +209,11 @@
 ;; Question: Do we need to pin the buffer?
 #+sbcl
 (defmacro def-encoder-sbcl (c-type)
-  `(progn  
+  `(progn
      (assert (>= (length buffer)
                  (+ start ,(cffi:foreign-type-size c-type)))
              () "Buffer too small for requested data type: ~A" ,c-type)
-     (setf (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer) 
+     (setf (cffi:mem-ref (cffi:inc-pointer (sb-sys:vector-sap buffer)
                                            start)
                          ,c-type)
            value)))
@@ -222,10 +222,10 @@
 (defmacro def-encoder-cffi (c-type swap)
   `(cffi:with-foreign-object (x ,c-type)
      (setf (cffi:mem-ref x ,c-type) value)
-     (setf ,@(loop 
+     (setf ,@(loop
                 with n = (cffi:foreign-type-size c-type)
                 for i below n
-                for j = (if swap  
+                for j = (if swap
                             (- n i 1)
                             i)
                 append
@@ -236,7 +236,7 @@
 (defmacro def-encoder (name c-type lisp-type endian)
   `(progn
      (declaim (inline ,name))
-     (defun ,name (value &optional 
+     (defun ,name (value &optional
                    (buffer (make-octet-vector ,(cffi:foreign-type-size c-type)))
                    (start 0))
        (declare (type ,lisp-type value)
@@ -285,8 +285,8 @@
         (end (+ start n))
         (accum 0)
         (i start (1+ i))
-        (k (the fixnum 
-             (ecase endian 
+        (k (the fixnum
+             (ecase endian
                (:little 0)
                (:big (* 8 (1- n)))))
            (the fixnum
@@ -298,7 +298,7 @@
                      (byte 8 k)
                      accum))
     ))
-            
+
     ;; (let ((accum 0)
     ;;       (count (/ bits 8)))
     ;;   (declare (integer accum))
@@ -330,7 +330,7 @@
         (end (+ start n))
         (i start (1+ i))
         (k (the fixnum
-             (ecase endian 
+             (ecase endian
                (:little 0)
                (:big (* 8 (1- n)))))
            (the fixnum
@@ -360,7 +360,7 @@
 (defmacro def-cffi-cast (name from-lisp-type from-c-type to-c-type)
   (let ((val (gensym))
         (x (gensym)))
-    `(progn 
+    `(progn
        (declaim (inline ,name))
        (defun ,name (,val)
          "Use CFFI to extract the bits of val by a C-like cast."
@@ -368,16 +368,16 @@
          (cffi:with-foreign-object (,x ,from-c-type)
            (setf (cffi:mem-ref ,x ,from-c-type) ,val)
            (cffi:mem-ref ,x ,to-c-type))))))
-                        
-(def-cffi-cast scary-single-float-bits single-float :float :uint32) 
+
+(def-cffi-cast scary-single-float-bits single-float :float :uint32)
 (def-cffi-cast scary-make-single-float (unsigned-byte 32) :uint32 :float)
 
-(def-cffi-cast scary-double-float-bits double-float :double :uint64) 
+(def-cffi-cast scary-double-float-bits double-float :double :uint64)
 (def-cffi-cast scary-make-double-float (unsigned-byte 64) :uint64 :double)
 
 
 
-(declaim (inline decode-double-float 
+(declaim (inline decode-double-float
                  encode-double-float))
 (defun decode-double-float (buffer endian &optional (start 0))
   (declare (type octet-vector buffer)
@@ -412,10 +412,10 @@
 ;;        (defun ,name (buffer &optional (start 0))
 ;;          (declare (type octet-vector buffer)
 ;;                   (type fixnum start))
-;;          (logior ,@(loop 
+;;          (logior ,@(loop
 ;;                       with n = (/ bits 8)
 ;;                       for i below n
-;;                       for j = (ecase endian 
+;;                       for j = (ecase endian
 ;;                                 (:little i)
 ;;                                 (:big (- n i 1)))
 ;;                       collect
@@ -461,9 +461,9 @@
 (defun varint-unzigzag (value)
   (declare (integer value))
   (let ((lowbit (ldb (byte 1 0) value)))
-    (* (ash (+ value lowbit) -1) 
+    (* (ash (+ value lowbit) -1)
        (- 1 (* 2 lowbit)))))
-         
+
 
 
 ;; i don't know how to do this to arbitrary precision for negative
@@ -479,26 +479,26 @@
 (defun svarint-size (value)
   (uvarint-size (varint-zigzag value)))
 
-(defun encode-uvarint (value &optional 
+(defun encode-uvarint (value &optional
                        (buffer (make-octet-vector (uvarint-size value)))
                        (start 0))
   (declare (type (integer 0) value)
            (type octet-vector buffer)
            (type fixnum start))
-  (loop 
+  (loop
      for v = value then (ash v -7)
      for v-next = (ash v -7)
      for j from 0 below most-positive-fixnum
      for i = (+ start j)
      until (or (and (zerop v) (> j 0))
                ;; cut out negative handling.
-               ;(and (< value 0) 
+               ;(and (< value 0)
                     ;;(= j 10) ;; i guess we'll use google's arbitrary limit...
                     ;;; fixup last element
                     ;(setf (ldb (byte 1 7) (aref buffer (1- i)))
                           ;0)))
                )
-     do (progn 
+     do (progn
           ;(format t "~&i: ~A, v: ~A, v-next: ~A" i v v-next)
           (setf (aref buffer i)
                 (logior (ldb (byte 7 0) v)
@@ -530,10 +530,10 @@
 ;;                   shift)))
 ;;     (cond ;; fast paths
 ;;       ((not (logbitp 7 (aref buffer start)))
-;;        (values (aref buffer start) 
+;;        (values (aref buffer start)
 ;;                1))
 ;;       ((not (logbitp 7 (aref buffer (+ start 1))))
-;;        (values (logior (mask (aref buffer start)) 
+;;        (values (logior (mask (aref buffer start))
 ;;                        (extract 1 7))
 ;;                2))
 ;;       ((not (logbitp 7 (aref buffer (+ start 2))))
@@ -565,7 +565,7 @@
 ;; ;; rather (quite) slow...
 ;; (defun read-octets (stream1 &key limit)
 ;;   "read up to limit bytes from stream or eof if limit is nil"
-;;   (loop  with v =  (make-array 0 
+;;   (loop  with v =  (make-array 0
 ;;                                :element-type '(unsigned-byte 8)
 ;;                                :adjustable t :fill-pointer t)
 ;;      for x = (read-byte stream1 nil nil)
@@ -589,40 +589,40 @@
 ;;;;;;;;;;;;;;;
 
 #-sbcl
-(defun encode-utf8 (string 
-                         &key 
+(defun encode-utf8 (string
+                         &key
                          (string-start 0) (string-end (length string))
                          buffer (buffer-start 0))
   (let ((buffer (or buffer (make-octet-vector (- string-end string-start)))))
-    (loop 
+    (loop
        for i-b from buffer-start
        for i-s from string-start below string-end
        do (setf (aref buffer i-b)
                 (char-code (aref string i-s))))
     (values (- string-end string-start)
             buffer)))
-  
+
 #-sbcl
 (defun decode-utf8 (buffer &key
                          (buffer-start 0) (buffer-end (length buffer))
-                         (string-start 0) 
-                         (string (make-string (+ string-start 
+                         (string-start 0)
+                         (string (make-string (+ string-start
                                                  (- buffer-end buffer-start)))))
-  (loop 
+  (loop
      for i-s from string-start
      for i-b from buffer-start below buffer-end
      do (setf (aref string i-s)
               (code-char (aref buffer i-b))))
   (values string
           (- buffer-end buffer-start)))
-      
+
 
 #+sbcl
-(defun encode-utf8 (string 
-                    &key 
+(defun encode-utf8 (string
+                    &key
                     (string-start 0) (string-end (length string))
                     buffer (buffer-start 0))
-  (let ((octets (sb-ext:string-to-octets string 
+  (let ((octets (sb-ext:string-to-octets string
                                          :start string-start
                                          :end string-end)))
     (values (length octets)
@@ -630,14 +630,14 @@
                 (replace buffer octets :start1 buffer-start)
                 octets))))
 
- 
- 
+
+
 #+sbcl
 (defun decode-utf8 (buffer &key
-                    (string-start 0) string 
+                    (string-start 0) string
                     (buffer-start 0) (buffer-end (length buffer)))
-  (let ((str (sb-ext:octets-to-string buffer 
-                                      :start buffer-start 
+  (let ((str (sb-ext:octets-to-string buffer
+                                      :start buffer-start
                                       :end buffer-end
                                       :external-format :utf8)))
     (values (if string
@@ -646,7 +646,7 @@
             (- buffer-end buffer-start))))
 
 (defun utf8-size (string)
-  (multiple-value-bind (size buffer) 
+  (multiple-value-bind (size buffer)
       (encode-utf8 string)
     (declare (ignore buffer))
     size))
@@ -661,10 +661,10 @@
                (encode-int value endian buffer 0 bits)
                (= value (decode-sint buffer endian 0 bits))))
            (test-scary-single (x)
-             (= x 
+             (= x
                 (scary-make-single-float (scary-single-float-bits x))))
            (test-scary-double (x)
-             (= x 
+             (= x
                 (scary-make-double-float (scary-double-float-bits x))))
            (test-single (val buffer endian)
              (multiple-value-bind (i-enc buf-enc)
@@ -679,7 +679,7 @@
                     (equalp buf-enc buffer)
                     (= val (decode-double-float buffer endian)))))
            (test-zigzag (original encoded)
-             (and 
+             (and
               (= (varint-zigzag original ) encoded)
               (= (varint-unzigzag encoded) original)))
            (test-uvarint-encoding (value expected-buffer)
@@ -702,7 +702,7 @@
                  (and (= i-dec i-enc)
                       (= value v-dec)))))
            (test-utf8 (string expected-bytes)
-             (multiple-value-bind (size bytes) 
+             (multiple-value-bind (size bytes)
                  (encode-utf8 string)
                (and (= size (length expected-bytes))
                     (equalp bytes expected-bytes)
@@ -711,7 +711,7 @@
                       (and (string= string decoded-val)
                            (= decoded-size (length expected-bytes)))))))
            )
-               
+
     ;; test integer encoding
     (assert (test-uint 10 :little 32))
     (assert (test-uint 1024 :little 32))
@@ -739,14 +739,14 @@
     ;; test varint zigzags based on google's examples
     (assert (test-zigzag 0  0))
     (assert (test-zigzag -1  1))
-    (assert (test-zigzag 1  2)) 
+    (assert (test-zigzag 1  2))
    (assert (test-zigzag 2147483647  4294967294))
     (assert (test-zigzag -2147483648 4294967295))
     ;; varints
     ;; example encodings from the google docs
-    (assert (test-uvarint-encoding 
+    (assert (test-uvarint-encoding
              150 (octet-vector #x96 1)))
-    (assert (test-uvarint-encoding 
+    (assert (test-uvarint-encoding
              300 (octet-vector #b10101100 #b00000010)))
     (assert (test-uvarint 10))
     (assert (test-uvarint 100))
@@ -764,8 +764,8 @@
     (assert (test-svarint 100))
     (assert (test-svarint -100000))
     ;; utf8
-    (assert (test-utf8 "testing" 
-                       (octet-vector #x74 #x65 #x73 
+    (assert (test-utf8 "testing"
+                       (octet-vector #x74 #x65 #x73
                                      #x74 #x69 #x6e #x67)))
     )
   t)

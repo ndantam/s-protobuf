@@ -53,7 +53,7 @@
                   repeated fields may not quite be there yet. There is
                   no support for Extensions or Services."))
            (:sect 2 "Getting S-PROTOBUF"
-                  (programlisting 
+                  (programlisting
                    ,(concatenate 'string
                                  "git clone "
                                  "http://www.prism.gatech.edu/"
@@ -71,27 +71,27 @@
                   doesn't meet your needs, here are some things that
                   might")
                   (itemizedlist
-                   (listitem 
-                    (para 
-                     ((ulink 
-                       url 
+                   (listitem
+                    (para
+                     ((ulink
+                       url
                        "http://code.google.com/p/protobuf/wiki/ThirdPartyAddOns")
                       "Other Protobuf Implementations")))
 
                    (listitem (para ((ulink url "http://www.asn1.org/")
                                     "ASN.1")))
-                   (listitem (para ((ulink url 
+                   (listitem (para ((ulink url
                                            "http://developers.facebook.com/thrift/")
                                     "Facebook Thrift")))
-                   (listitem 
-                    (para 
-                     ((ulink 
-                       url 
+                   (listitem
+                    (para
+                     ((ulink
+                       url
                        "http://en.wikipedia.org/wiki/External_Data_Representation")
                       "XDR")))
                    ))
-           (:bsd-license 2 "Legal" 
-                         "2008" "Google Inc." 
+           (:bsd-license 2 "Legal"
+                         "2008" "Google Inc."
                          "2009-2010" "Georgia Tech Research Corporation"))
     (:sect 1 "Implementation Notes"
            (:sect 2 "Details"
@@ -159,7 +159,7 @@
                            can also write the protocol buffer
                            definitions as S-Expressions.  Here is
                            documentation by example:")
-                         (programlisting 
+                         (programlisting
                           "(require :s-protobuf)"
                           ,(string #\Newline)
                           ";; A simple message"
@@ -193,19 +193,19 @@
                     vectors which are are simple-array's when
                     possible (packed types with fixed bit size).")
                   (itemizedlist
-                   (listitem (:docfun "PB:PACK" 
+                   (listitem (:docfun "PB:PACK"
                                       "Generic function, packs
                                       protobuf into an octet buffer"
                                       (packed-size buffer) (protobuf "The object to
                                       encode") &optional buffer
                                       start))
-                   (listitem (:docfun "PB:UNPACK" 
+                   (listitem (:docfun "PB:UNPACK"
                                       "Generic function, unpacks a
                                         protobuf object from an octet
                                         buffer"
-                                      (protobuf bytes-read) 
+                                      (protobuf bytes-read)
                                       buffer protobuf &optional start end))
-                   (listitem (:docfun "PB:PACKED-SIZE"  
+                   (listitem (:docfun "PB:PACKED-SIZE"
                                       "Generic function, number of
                                       octets required to encode
                                       protobuf" size protobuf)) )))
@@ -237,7 +237,7 @@
                   (para "All numeric types are encoded in
                   little-endian byte order.")
                   (variablelist
-                   (varlistentry 
+                   (varlistentry
                     (term "double")
                     (listitem (para "IEEE754 double precision floating
                     point")))
@@ -245,19 +245,19 @@
                     (term "float")
                     (listitem (para "IEEE754 single precision floating
                     point")))
-                   (varlistentry 
+                   (varlistentry
                     (term "int32")
                     (listitem (para "unsigned varint, maximum 32 bits
                     decoded precision")))
-                   (varlistentry 
+                   (varlistentry
                     (term "int64")
                     (listitem (para "unsigned varint, maximum 64 bits
                                decoded precision" )))
-                   (varlistentry 
+                   (varlistentry
                     (term "uint32")
                     (listitem (para "unsigned varint, maximum 32 bits
                     decoded precision")))
-                   (varlistentry 
+                   (varlistentry
                     (term "uint64")
                     (listitem (para "unsigned varint, maximum 64 bits
                     decoded precision")))
@@ -330,7 +330,7 @@
                      size indicator; implementations should handle
                      these needs via some external mechanism."))
     )))
-           
+
 
 
 (defun expand-inline ()
