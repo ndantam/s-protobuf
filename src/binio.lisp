@@ -73,14 +73,17 @@
 
 (deftype octet () '(unsigned-byte 8))
 (deftype octet-vector (&optional count)
+  "A simple vector of octets."
   `(simple-array octet (,count)))
 
 (declaim (inline make-octet-vector))
 (defun make-octet-vector (count)
+  "Create an octet vector of size COUNT."
   (declare (fixnum count))
   (make-array count :element-type 'octet))
 
 (defun octet-vector (&rest args)
+  "Create a new octet vector with elements ARGS."
   (let ((v (make-octet-vector (length args))))
     (loop
        for x in args
@@ -166,6 +169,7 @@
   `(progn
      (declaim (inline ,name))
      (defun ,name (buffer &optional (start 0))
+       ,(format nil "Decode a ~A-ENDIAN ~A from BUFFER at position START." endian lisp-type)
        (declare (type octet-vector buffer)
                 (type fixnum start))
        (the ,lisp-type
@@ -239,6 +243,7 @@
      (defun ,name (value &optional
                    (buffer (make-octet-vector ,(cffi:foreign-type-size c-type)))
                    (start 0))
+       ,(format nil "Encode ~A-ENDIAN ~A VALUE into BUFFER at position START." endian lisp-type)
        (declare (type ,lisp-type value)
                 (type octet-vector buffer)
                 (type fixnum start))
@@ -279,6 +284,9 @@
 (declaim (inline decode-uint decode-sint encode-int))
 
 (defun decode-uint (buffer endian &optional (start 0) (bits 32))
+  "Decode an unsigned integer from BUFFER at position START.
+ENDIAN: (or :big :little).
+BITS: bit width of the integer, a multiple of 8."
   (declare (fixnum start bits)
            (type octet-vector buffer))
   (do* ((n (the fixnum (/ bits 8)))
@@ -310,6 +318,9 @@
 
 
 (defun decode-sint (buffer endian &optional (start 0) (bits 32) )
+  "Decode a signed integer from BUFFER at position START.
+ENDIAN: (or :big :little).
+BITS: bit width of the integer, a multiple of 8."
   (declare (fixnum start bits)
            (type (octet-vector) buffer))
   (let ((result (decode-uint buffer endian start bits))
@@ -321,6 +332,9 @@
 
 
 (defun encode-int (val endian &optional buffer (start 0) (bits 32))
+  "Encode an integer into BUFFER at position START.
+ENDIAN: (or :big :little).
+BITS: bit width of the integer, a multiple of 8."
   (declare (integer val)
            (fixnum start bits)
            (symbol endian)
@@ -380,23 +394,31 @@
 (declaim (inline decode-double-float
                  encode-double-float))
 (defun decode-double-float (buffer endian &optional (start 0))
+  "Decode a double-float from BUFFER at position START.
+ENDIAN: (or :big :little)."
   (declare (type octet-vector buffer)
            (symbol endian))
   (scary-make-double-float (decode-uint buffer endian start 64)))
 
-(defun encode-double-float (val endian &optional buffer (start 0))
-  (let ((bits (scary-double-float-bits val))
+(defun encode-double-float (value endian &optional buffer (start 0))
+  "Encode a double-float VALUE into BUFFER at position START.
+ENDIAN: (or :big :little)."
+  (let ((bits (scary-double-float-bits value))
         (buffer (or buffer (make-octet-vector 8))))
     (declare (type octet-vector buffer))
     (encode-int bits endian buffer start 64)))
 
 
 (defun decode-single-float (buffer endian &optional (start 0))
+  "Decode a single-float from BUFFER at position START.
+ENDIAN: (or :big :little)."
   (declare (type octet-vector buffer))
   (scary-make-single-float (decode-sint buffer endian start)))
 
-(defun encode-single-float (val endian &optional buffer (start 0))
-  (let ((bits (scary-single-float-bits val))
+(defun encode-single-float (value endian &optional buffer (start 0))
+  "Encode a single-float VALue into BUFFER at position START.
+ENDIAN: (or :big :little)."
+  (let ((bits (scary-single-float-bits value))
         (buffer (or buffer (make-octet-vector 4))))
     (declare (type octet-vector buffer))
     (encode-int bits endian buffer start)))
@@ -472,16 +494,19 @@
 
 (declaim (inline uvarint-size))
 (defun uvarint-size (value)
+  "Number of octets required to store VALUE as an unsigned varint."
   (declare (type (integer 0) value))
   (max 1 (ceiling (integer-length value) 7)))
 
 (declaim (inline uvarint-size))
 (defun svarint-size (value)
+  "Number of octets required to store VALUE as a signed varint."
   (uvarint-size (varint-zigzag value)))
 
 (defun encode-uvarint (value &optional
                        (buffer (make-octet-vector (uvarint-size value)))
                        (start 0))
+  "Encode a VALUE into BUFFER as an unsigned varint at position START."
   (declare (type (integer 0) value)
            (type octet-vector buffer)
            (type fixnum start))
@@ -507,6 +532,7 @@
 
 
 (defun decode-uvarint (buffer start)
+  "Decode an unsigned varint from BUFFER at position START."
   (declare (type octet-vector buffer)
            (fixnum start))
   (loop
@@ -552,10 +578,12 @@
 (defun encode-svarint (value &optional
                        (buffer (make-octet-vector (svarint-size value)))
                        (start 0))
+  "Encode VALUE into BUFFER as a signed varint at position START."
   (declare (type octet-vector buffer))
   (encode-uvarint (varint-zigzag value) buffer start))
 
 (defun decode-svarint (buffer start)
+  "Decode a signed varint from BUFFER at position START."
   (declare (type octet-vector buffer))
   (multiple-value-bind (uv i)
       (decode-uvarint buffer start)
@@ -622,6 +650,7 @@
                     &key
                     (string-start 0) (string-end (length string))
                     buffer (buffer-start 0))
+  "Encode STRING into BUFFER as utf8."
   (let ((octets (sb-ext:string-to-octets string
                                          :start string-start
                                          :end string-end)))
@@ -636,6 +665,7 @@
 (defun decode-utf8 (buffer &key
                     (string-start 0) string
                     (buffer-start 0) (buffer-end (length buffer)))
+  "Decode a utf8 STRING from BUFFER."
   (let ((str (sb-ext:octets-to-string buffer
                                       :start buffer-start
                                       :end buffer-end
@@ -646,6 +676,7 @@
             (- buffer-end buffer-start))))
 
 (defun utf8-size (string)
+  "Number of octets required to store STRING as utf8."
   (multiple-value-bind (size buffer)
       (encode-utf8 string)
     (declare (ignore buffer))
