@@ -1,4 +1,2 @@
 This packagage, s-protobuf, provides a Common Lisp implemenation for
 the Protocol Buffers data encoding format, created by Google.
-
-http://www.prism.gatech.edu/~ndantam3/docs/s-protobuf/
